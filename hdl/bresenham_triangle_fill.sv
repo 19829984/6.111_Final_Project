@@ -10,7 +10,7 @@ module bresenhamTriangleFill #(parameter COORD_WIDTH = 16) (
     input wire signed [COORD_WIDTH-1:0] x1, y1,
     input wire signed [COORD_WIDTH-1:0] x2, y2,
     output logic signed [COORD_WIDTH-1:0] x, y,
-    output logic drawing,
+    output logic drawing, // Essentially a valid_out signal
     output logic busy,
     output logic done
 );

@@ -1,7 +1,7 @@
 *.lnk
 # Created by https://www.toptal.com/developers/gitignore/api/xilinxvivado
 # Edit at https://www.toptal.com/developers/gitignore?templates=xilinxvivado
-
+.Xil/
 ### XilinxVivado ###
 #########################################################################################################
 ##	This is an example .gitignore file for Vivado, please treat it as an example as
@@ -9,7 +9,7 @@
 #########
 #Exclude all
 *
-!*/
+# !*/
 !.gitignore
 ###########################################################################
 ##	VIVADO

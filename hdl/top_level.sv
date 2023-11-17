@@ -66,7 +66,6 @@ module top_level(
   );
 
   localparam COORD_WIDTH = 16;
-  logic start_draw = new_frame;
   logic signed [COORD_WIDTH-1:0] x, y;
   logic drawing;
 
@@ -86,12 +85,131 @@ module top_level(
   //     .done()
   // );
 
+  // Double Frame Buffer and its state machine
+  localparam FB_BIT_WIDTH = 21;
+  localparam FB_WIDTH = 320;
+  localparam FB_HEIGHT = 180;
+  localparam FB_NUM_PIXELS = FB_WIDTH * FB_HEIGHT;
+  localparam FB_ADDR_WIDTH = $clog2(FB_NUM_PIXELS);
+  logic [FB_BIT_WIDTH-1:0] fb_read, fb_read_1, fb_read_2;
+  logic [FB_BIT_WIDTH-1:0] fb_write_color, fb_clear_color, fb_render_color;
+  logic [FB_ADDR_WIDTH-1:0] fb_write_addr, fb_clear_addr, fb_render_addr;
+  logic [FB_ADDR_WIDTH-1:0] fb_read_addr;
+  logic fb_we, fb_front;
+
+  assign fb_read_addr = hcount_scaled + FB_WIDTH*vcount_scaled;
+  assign fb_render_addr = x + FB_WIDTH*y;
+  assign fb_render_color = 21'b111111111111111111111;
+  // Frame Buffer for 320x180 5656RGBA frame
+  xilinx_true_dual_port_read_first_2_clock_ram #(
+    .RAM_WIDTH(FB_BIT_WIDTH),
+    .RAM_DEPTH(FB_NUM_PIXELS))
+    frame_buffer_1 (
+    .addra(fb_write_addr), //pixels are stored using this math
+    .clka(clk_pixel),
+    .wea(fb_we && fb_front),
+    .dina(fb_write_color),
+    .ena(1'b1),
+    .regcea(1'b1),
+    .rsta(sys_rst),
+    .douta(), //never read from this side
+    .addrb(fb_read_addr),//transformed lookup pixel
+    .dinb(16'b0),
+    .clkb(clk_pixel),
+    .web(1'b0),
+    .enb(valid_scaled_addr),
+    .rstb(sys_rst),
+    .regceb(1'b1),
+    .doutb(fb_read_1)
+  );
+
+  // Frame Buffer for 320x180 5656RGBA frame
+  xilinx_true_dual_port_read_first_2_clock_ram #(
+    .RAM_WIDTH(FB_BIT_WIDTH),
+    .RAM_DEPTH(FB_NUM_PIXELS))
+    frame_buffer_2 (
+    .addra(fb_write_addr), //pixels are stored using this math
+    .clka(clk_pixel),
+    .wea(fb_we && ~fb_front),
+    .dina(fb_write_color),
+    .ena(1'b1),
+    .regcea(1'b1),
+    .rsta(sys_rst),
+    .douta(), //never read from this side
+    .addrb(fb_read_addr),//transformed lookup pixel
+    .dinb(16'b0),
+    .clkb(clk_pixel),
+    .web(1'b0),
+    .enb(valid_scaled_addr),
+    .rstb(sys_rst),
+    .regceb(1'b1),
+    .doutb(fb_read_2)
+  );
+  
+  enum {IDLE, INIT, CLEARING, DRAW, DONE} fb_state;
+  logic start_render;
+  logic render_done;
+  always_ff @(posedge clk_pixel) begin
+    if (sys_rst) begin
+      fb_state <= IDLE;
+    end else begin
+      case (fb_state)
+        IDLE: begin
+          if (new_frame) begin
+            fb_state <= INIT;
+          end
+        end
+        INIT: begin
+          fb_state <= CLEARING;
+          fb_front <= ~fb_front;
+          fb_clear_addr <= 0;
+          fb_clear_color <= 21'b000000000000000000000;
+        end
+        CLEARING: begin
+          fb_clear_addr <= fb_clear_addr + 1;
+          if (fb_clear_addr == FB_NUM_PIXELS - 1) begin
+            fb_state <= DRAW;
+            start_render <= 1;
+          end
+        end
+        DRAW: begin
+          if (render_done) begin
+            fb_state <= DONE;
+          end
+          start_render <= 0;
+        end
+        DONE: begin
+          fb_state <= IDLE;
+        end
+        default: begin
+          if (new_frame) begin
+            fb_state <= INIT;
+          end
+        end
+      endcase
+    end
+  end
+  logic [31:0] x_counter;
+  logic [COORD_WIDTH-1:0] x_input;
+  always_ff @(posedge clk_pixel) begin
+    fb_write_addr <= (fb_state == CLEARING) ? fb_clear_addr : fb_render_addr;
+    fb_write_color <= (fb_state == CLEARING) ? fb_clear_color : fb_render_color;
+    fb_read <= fb_front ? fb_read_1 : fb_read_2;
+    fb_we <= (fb_state == CLEARING) || (drawing);
+    x_counter <= x_counter + 1;
+    if (x_counter == 74250000 - 1) begin
+      x_input <= x_input + 1;
+      x_counter <= 0;
+    end
+  end
+
+  // Rendering
   bresenhamTriangleFill #(.COORD_WIDTH(COORD_WIDTH)) draw_triangle (
       .clk_in(clk_pixel),
       .rst_in(sys_rst),
-      .start_draw(btn[2]),
+      .start_draw(start_render),
       .oe(1),
-      .x0(0),
+      .x0(x_input),
       .y0(0),
       .x1(300),
       .y1(50),
@@ -101,57 +219,9 @@ module top_level(
       .y(y),
       .drawing(drawing),
       .busy(),
-      .done()
+      .done(render_done)
   );
 
-  localparam FRAME_BUFFER_WIDTH = 21;
-  logic [FRAME_BUFFER_WIDTH-1:0] frame_buff_1;
-  logic [FRAME_BUFFER_WIDTH-1:0] frame_buff_2;
-  // Frame Buffer for 320x180 5656RGBA frame
-  xilinx_true_dual_port_read_first_2_clock_ram #(
-    .RAM_WIDTH(FRAME_BUFFER_WIDTH),
-    .RAM_DEPTH(320*180))
-    frame_buffer_1 (
-    .addra(x + 320*y), //pixels are stored using this math
-    .clka(clk_pixel),
-    .wea(drawing),
-    .dina(32'hFFFFFFFF), //white
-    .ena(1'b1),
-    .regcea(1'b1),
-    .rsta(sys_rst),
-    .douta(), //never read from this side
-    .addrb(hcount_scaled + 320*vcount_scaled),//transformed lookup pixel
-    .dinb(16'b0),
-    .clkb(clk_pixel),
-    .web(1'b0),
-    .enb(valid_scaled_addr),
-    .rstb(sys_rst),
-    .regceb(1'b1),
-    .doutb(frame_buff_1)
-  );
-
-  // Frame Buffer for 320x180 5656RGBA frame
-  xilinx_true_dual_port_read_first_2_clock_ram #(
-    .RAM_WIDTH(FRAME_BUFFER_WIDTH),
-    .RAM_DEPTH(320*180))
-    frame_buffer_2 (
-    .addra(x + 180*y), //pixels are stored using this math
-    .clka(sys_clk),
-    .wea(drawing),
-    .dina(32'hFFFFFFFF), //white
-    .ena(1'b1),
-    .regcea(1'b1),
-    .rsta(sys_rst),
-    .douta(), //never read from this side
-    .addrb(hcount_scaled + 180*vcount_scaled),//transformed lookup pixel
-    .dinb(16'b0),
-    .clkb(clk_pixel),
-    .web(1'b0),
-    .enb(valid_scaled_addr),
-    .rstb(sys_rst),
-    .regceb(1'b1),
-    .doutb(frame_buff_2)
-  );
   logic [7:0] tp_r, tp_g, tp_b; //color values as generated by test_pattern module
 
   test_pattern_generator mtpg(
@@ -167,9 +237,9 @@ module top_level(
   
   color_conversion col_converter(
     .clk_in(clk_pixel),
-    .red_in(frame_buff_1[20:16]),
-    .green_in(frame_buff_1[16:10]),
-    .blue_in(frame_buff_2[10:6]),
+    .red_in(fb_read[20:16]),
+    .green_in(fb_read[16:10]),
+    .blue_in(fb_read[10:6]),
     .red_out(converted_r),
     .green_out(converted_g),
     .blue_out(converted_b)
@@ -184,7 +254,7 @@ module top_level(
       red = converted_r;
       green = converted_g;
       blue = converted_b;
-      // depth = frame_buff_1[5:0];
+      // depth = fb_read_1[5:0];
     end
   end
  
