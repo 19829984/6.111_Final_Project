@@ -2,7 +2,8 @@
 `default_nettype none
 
 // This module performs the m1 X m2 matrix multiplication operation
-// Has an 8 cycle delay
+// Index of each matrix is [row][column]
+// Takes 9 cycles from start pulse
 module matrixMultiply4x4 #(parameter FIXED_POINT = 1, parameter WIDTH = 32) (
     input wire clk_in,
     input wire rst_in,

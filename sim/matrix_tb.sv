@@ -88,7 +88,7 @@ localparam SF = $pow(2.0, -16.0);
     start_matrix_multiply = 1;
     #10;
     start_matrix_multiply = 0;
-    #120; // Wait 7 cycle
+    #120; // Wait at least 8 cycles
     $display("Done: %d", done);
     $display("Expected: {{260.5, 40.75, 105.75, -8}, {712.375, 85.8125, 240.063, 37}, {1033.63, 137.188, 352.563, 59}, {1383.13, 190.063, 472.719, 89}}");
     $display("Actual  : {{%.5f, %.5f, %.5f, %.5f}, {%.5f, %.5f, %.5f, %.5f}, {%.5f, %.5f, %.5f, %.5f}, {%.5f, %.5f, %.5f, %.5f}}",
