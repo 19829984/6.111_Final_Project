@@ -189,17 +189,26 @@ module top_level(
       endcase
     end
   end
-  logic [31:0] x_counter;
   logic [COORD_WIDTH-1:0] x_input;
+  logic [COORD_WIDTH-1:0] y_input;
   always_ff @(posedge clk_pixel) begin
     fb_write_addr <= (fb_state == CLEARING) ? fb_clear_addr : fb_render_addr;
     fb_write_color <= (fb_state == CLEARING) ? fb_clear_color : fb_render_color;
-    fb_read <= fb_front ? fb_read_1 : fb_read_2;
+    fb_read <= fb_front ? fb_read_2 : fb_read_1;
     fb_we <= (fb_state == CLEARING) || (drawing);
-    x_counter <= x_counter + 1;
-    if (x_counter == 74250000 - 1) begin
-      x_input <= x_input + 1;
-      x_counter <= 0;
+    if (new_frame) begin
+      if (sw[3]) begin
+        x_input <= x_input + 1;
+      end
+      if (sw[4]) begin
+        x_input <= x_input - 1;
+      end
+      if (sw[5]) begin
+        y_input <= y_input + 1;
+      end
+      if (sw[6]) begin
+        y_input <= y_input - 1;
+      end
     end
   end
 
@@ -210,7 +219,7 @@ module top_level(
       .start_draw(start_render),
       .oe(1),
       .x0(x_input),
-      .y0(0),
+      .y0(y_input),
       .x1(300),
       .y1(50),
       .x2(200),
