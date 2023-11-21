@@ -155,6 +155,5 @@ dotProduct #(.FIXED_POINT(FIXED_POINT), .WIDTH(WIDTH)) dp3 (
     .out(dp3_out)
 );
 
-
 endmodule
 `default_nettype wire
