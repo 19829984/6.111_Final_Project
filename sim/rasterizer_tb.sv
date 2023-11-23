@@ -34,13 +34,13 @@ logic [31:0] x, y;
     start_render = 0;
     #5;
     rst_in = 1;
-    #5;
+    #10;
     rst_in = 0;
     #20;
     start_render = 1;
-    #5;
+    #10;
     start_render = 0;
-    #10000;
+    #300000;
     $display("Simulation finished");
     $finish;
   end

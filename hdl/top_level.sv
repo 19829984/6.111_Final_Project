@@ -70,7 +70,7 @@ module top_level(
   logic drawing;
 
   // Double Frame Buffer and its state machine
-  localparam FB_BIT_WIDTH = 21;
+  localparam FB_BIT_WIDTH = 22;
   localparam FB_WIDTH = 320;
   localparam FB_HEIGHT = 180;
   localparam FB_NUM_PIXELS = FB_WIDTH * FB_HEIGHT;
@@ -83,7 +83,7 @@ module top_level(
 
   assign fb_read_addr = hcount_scaled + FB_WIDTH*vcount_scaled;
   assign fb_render_addr = x + FB_WIDTH*y;
-  assign fb_render_color = 21'b111111111111111111111;
+  assign fb_render_color = 22'b1111111111111111111111;
   // Frame Buffer for 320x180 5656RGBA frame
   xilinx_true_dual_port_read_first_2_clock_ram #(
     .RAM_WIDTH(FB_BIT_WIDTH),
@@ -147,7 +147,7 @@ module top_level(
           fb_state <= CLEARING;
           fb_front <= ~fb_front;
           fb_clear_addr <= 0;
-          fb_clear_color <= 21'b000000000000000000000;
+          fb_clear_color <= 22'b0000000000000000000000;
         end
         CLEARING: begin
           fb_clear_addr <= fb_clear_addr + 1;
@@ -240,8 +240,8 @@ module top_level(
   
   color_conversion col_converter(
     .clk_in(clk_pixel),
-    .red_in(fb_read[20:16]),
-    .green_in(fb_read[16:10]),
+    .red_in(fb_read[21:17]),
+    .green_in(fb_read[16:11]),
     .blue_in(fb_read[10:6]),
     .red_out(converted_r),
     .green_out(converted_g),
