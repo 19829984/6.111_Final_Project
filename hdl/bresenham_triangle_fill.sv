@@ -38,14 +38,6 @@ logic drawing_h;
 logic busy_a, busy_b, busy_h;
 logic drawing_third_edge;
 
-always_comb begin
-    // Only continue drawing on A and B when prev_y is updated to their last y output
-    // This makes it so that they stop when they advance to the next y value
-    oe_a = (state == DRAW_EDGE && ya == prev_y);
-    oe_b = (state == DRAW_EDGE && yb == prev_y);
-    oe_h = oe;
-end
-
 // Pipeline these signals to account for delay in coordinate output
 // such that they update the cycle after the final coordinate
 logic busy_pipe, done_pipe;
@@ -175,6 +167,14 @@ always_ff @(posedge clk_in) begin
             busy_pipe <= 0;
         end
     endcase
+end
+
+always_comb begin
+    // Only continue drawing on A and B when prev_y is updated to their last y output
+    // This makes it so that they stop when they advance to the next y value
+    oe_a = (state == DRAW_EDGE && ya == prev_y);
+    oe_b = (state == DRAW_EDGE && yb == prev_y);
+    oe_h = oe;
 end
 
 bresenhamLine #(.COORD_WIDTH(COORD_WIDTH)) line_drawer_a (

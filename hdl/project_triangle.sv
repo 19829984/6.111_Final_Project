@@ -13,6 +13,7 @@ module project_triangle #(parameter COORD_WIDTH = 32, parameter FB_HEIGHT = 180,
     output logic signed [2:0][2:0][COORD_WIDTH-1:0] projected_verts,
     output logic valid,
     output logic busy,
+    output logic [1:0] status,
     output logic done
 );
 localparam FB_HEIGHT_HALF = FB_HEIGHT / 2;
@@ -51,7 +52,6 @@ assign dividers_valid = div0_valid && div1_valid && div2_valid;
 
 logic signed [2:0][2:0][COORD_WIDTH-1:0] out_tri;
 logic signed [2:0][COORD_WIDTH-1:0] out_vert;
-// logic signed [COORD_WIDTH-1:0] test;
 assign projected_verts = out_tri;
 
 enum {IDLE, INIT, MODEL_MATRIX, VIEW_MATRIX, PROJ_MATRIX, CLIP, NDC, VIEWPORT, DONE} state;
@@ -91,6 +91,7 @@ always_ff @(posedge clk_in) begin
                     state <= DONE;
                     valid <= 1;
                     done <= 1;
+                    status <= 0;
                 end
                 else begin
                     state <= MODEL_MATRIX;
@@ -147,6 +148,7 @@ always_ff @(posedge clk_in) begin
                     state <= DONE;
                     valid <= 0;
                     done <= 1;
+                    status <= 2'b01;
                 end else begin
                     state <= NDC;
 
@@ -180,11 +182,11 @@ always_ff @(posedge clk_in) begin
                         state <= DONE;
                         valid <= 0;
                         done <= 1;
+                        status <= 2'b10;
                     end
                 end
             end
             VIEWPORT: begin
-                // test <= $signed(FB_WIDTH_HALF) * (vector_latest[0]) + ($signed(FB_WIDTH_HALF) << 16);
                 out_vert[0] <= $signed(FB_WIDTH_HALF) * (vector_latest[0] + 32'h00010000);
                 out_vert[1] <= $signed(FB_HEIGHT_HALF) * (32'h00010000 - vector_latest[1]);
                 out_vert[2] <= $signed(FAR_MINUS_NEAR_HALF) * vector_latest[2] + ($signed(FAR_PLUS_NEAR_HALF)  << 16);
@@ -194,6 +196,7 @@ always_ff @(posedge clk_in) begin
             DONE: begin
                 state <= IDLE;
                 busy <= 0;
+                vert_index <= 0;
             end
         endcase
     end

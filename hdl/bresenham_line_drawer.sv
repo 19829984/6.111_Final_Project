@@ -80,7 +80,7 @@ module bresenhamLine #(parameter COORD_WIDTH = 16) (
                 x_end <= xb;
                 y_end <= yb;
             end
-            default: begin
+            default: begin //IDLE
                 done <= 0;
                 if (start_draw) begin
                     state <= INIT_0; 

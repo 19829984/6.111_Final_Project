@@ -8,6 +8,10 @@ module top_level(
   output logic [15:0] led, //16 green output LEDs (located right above switches)
   output logic [2:0] rgb0, //rgb led
   output logic [2:0] rgb1, //rgb led
+  output logic [3:0] ss0_an,//anode control for upper four digits of seven-seg display
+  output logic [3:0] ss1_an,//anode control for lower four digits of seven-seg display
+  output logic [6:0] ss0_c, //cathode controls for the segments of upper four digits
+  output logic [6:0] ss1_c, //cathod controls for the segments of lower four digits
   output logic [2:0] hdmi_tx_p, //hdmi output signals (positives) (blue, green, red)
   output logic [2:0] hdmi_tx_n, //hdmi output signals (negatives) (blue, green, red)
   output logic hdmi_clk_p, hdmi_clk_n //differential hdmi clock
@@ -33,6 +37,19 @@ module top_level(
       .clk_tmds(clk_5x),
       .clk_sys(sys_clk));
  
+  //7-segment display-related concepts:
+  logic [31:0] val_to_display; //either the spi data or the btn_count data (default)
+  logic [6:0] ss_c; //used to grab output cathode signal for 7s leds
+ 
+  seven_segment_controller mssc(.clk_in(clk_pixel),
+                                .rst_in(sys_rst),
+                                .val_in(val_to_display),
+                                .cat_out(ss_c),
+                                .an_out({ss0_an, ss1_an}));
+  assign ss0_c = ss_c; //control upper four digit's cathodes!
+  assign ss1_c = ss_c; //same as above but for lower four digits!
+
+
   logic [10:0] hcount; //hcount of system!
   logic [9:0] vcount; //vcount of system!
   logic hor_sync; //horizontal sync signal
@@ -65,7 +82,7 @@ module top_level(
     .valid_addr_out(valid_scaled_addr)
   );
 
-  localparam COORD_WIDTH = 16;
+  localparam COORD_WIDTH = 32;
   logic signed [COORD_WIDTH-1:0] x, y;
   logic drawing;
 
@@ -133,6 +150,7 @@ module top_level(
   enum {IDLE, INIT, CLEARING, DRAW, DONE} fb_state;
   logic start_render;
   logic render_done;
+  logic [2:0] state_status;
   always_ff @(posedge clk_pixel) begin
     if (sys_rst) begin
       fb_state <= IDLE;
@@ -142,12 +160,14 @@ module top_level(
           if (new_frame) begin
             fb_state <= INIT;
           end
+          state_status <= 0;
         end
         INIT: begin
           fb_state <= CLEARING;
           fb_front <= ~fb_front;
           fb_clear_addr <= 0;
           fb_clear_color <= 22'b0000000000000000000000;
+          state_status <= 1;
         end
         CLEARING: begin
           fb_clear_addr <= fb_clear_addr + 1;
@@ -155,15 +175,18 @@ module top_level(
             fb_state <= DRAW;
             start_render <= 1;
           end
+          state_status <= 2;
         end
         DRAW: begin
           if (render_done) begin
             fb_state <= DONE;
           end
           start_render <= 0;
+          state_status <= 3;
         end
         DONE: begin
           fb_state <= IDLE;
+          state_status <= 4;
         end
         default: begin
           if (new_frame) begin
@@ -173,8 +196,9 @@ module top_level(
       endcase
     end
   end
-  logic [COORD_WIDTH-1:0] x_input;
-  logic [COORD_WIDTH-1:0] y_input;
+  logic signed [COORD_WIDTH-1:0] x_input;
+  logic signed [COORD_WIDTH-1:0] y_input;
+  logic signed [COORD_WIDTH-1:0] z_input;
   always_ff @(posedge clk_pixel) begin
     fb_write_addr <= (fb_state == CLEARING) ? fb_clear_addr : fb_render_addr;
     fb_write_color <= (fb_state == CLEARING) ? fb_clear_color : fb_render_color;
@@ -182,28 +206,54 @@ module top_level(
     fb_we <= (fb_state == CLEARING) || (drawing);
     if (new_frame) begin
       if (sw[3]) begin
-        x_input <= x_input + 1;
+        x_input <= x_input + 32'h0000199a;
       end
       if (sw[4]) begin
-        x_input <= x_input - 1;
+        x_input <= x_input - 32'h0000199a;
       end
       if (sw[5]) begin
-        y_input <= y_input + 1;
+        y_input <= y_input + 32'h0000199a;
       end
       if (sw[6]) begin
-        y_input <= y_input - 1;
+        y_input <= y_input - 32'h0000199a;
       end
+      if (sw[7]) begin
+        z_input <= z_input + 32'h0000199a;
+      end
+      if (sw[8]) begin
+        z_input <= z_input - 32'h0000199a;
+      end
+    end
+    if (sys_rst) begin
+      x_input <= 32'h00000000;
+      y_input <= 32'h00000000;
+      z_input <= 32'h00000000;
     end
   end
 
+  logic [2:0] raster_state;
+  logic [1:0] proj_status;
+
+  // Rasterizer debugging
+  always_ff @(posedge clk_pixel) begin
+    val_to_display[2:0] <= state_status;
+    val_to_display[10:8] <= raster_state;
+  end
+
   // Rendering
+  // TODO: Discard x and y values outside of the screen coordinates
   rasterizer #(.COORD_WIDTH(COORD_WIDTH)) rasterize (
     .clk_in(clk_pixel),
     .rst_in(sys_rst),
     .start(start_render),
+    .x_in(x_input),
+    .y_in(y_input),
+    .z_in(z_input),
     .x(x),
     .y(y),
+    .raster_state(raster_state),
     .drawing(drawing),
+    .proj_status(proj_status),
     .busy(),
     .done(render_done)
   );
