@@ -16,6 +16,8 @@ module project_triangle #(parameter COORD_WIDTH = 32, parameter FB_HEIGHT = 180,
     output logic [1:0] status,
     output logic done
 );
+localparam FP_HIGH = COORD_WIDTH*2 - COORD_WIDTH/2 - 1;
+localparam FP_LOW = COORD_WIDTH/2;;
 localparam FB_HEIGHT_HALF = FB_HEIGHT / 2;
 localparam FB_WIDTH_HALF = FB_WIDTH / 2;
 localparam FAR_MINUS_NEAR_HALF = (32'h00640000 - 32'h0000199a) / 2; // 100 - 0.1 in Q16.16
@@ -40,15 +42,7 @@ logic signed [COORD_WIDTH-1:0] abs_x, abs_y, abs_z, w;
 logic div0_start, div0_busy, div0_done, div0_valid;
 logic signed [COORD_WIDTH-1:0] div0_dividend, div0_divider, div0_out;
 
-logic div1_start, div1_busy, div1_done, div1_valid;
-logic signed [COORD_WIDTH-1:0] div1_dividend, div1_divider, div1_out;
-
-logic div2_start, div2_busy, div2_done, div2_valid;
-logic signed [COORD_WIDTH-1:0] div2_dividend, div2_divider, div2_out;
-
-logic dividers_busy, dividers_valid;
-assign dividers_busy = ~(div0_done && div1_done && div2_done);
-assign dividers_valid = div0_valid && div1_valid && div2_valid;
+(* dont_touch = "yes" *) logic signed [2*COORD_WIDTH-1:0] ndc_prod_x, ndc_prod_y, ndc_prod_z;
 
 logic signed [2:0][2:0][COORD_WIDTH-1:0] out_tri;
 logic signed [2:0][COORD_WIDTH-1:0] out_vert;
@@ -152,30 +146,23 @@ always_ff @(posedge clk_in) begin
                 end else begin
                     state <= NDC;
 
-                    // Initialize the dividers
-                    div0_dividend <= vector_out[0];
+                    // Initialize the divider
+                    // Calculate 1/w
+                    div0_dividend <= 32'h00010000;
                     div0_divider <= vector_out[3];
                     div0_start <= 1;
-
-                    div1_dividend <= vector_out[1];
-                    div1_divider <= vector_out[3];
-                    div1_start <= 1;
-
-                    div2_dividend <= vector_out[2];
-                    div2_divider <= vector_out[3];
-                    div2_start <= 1;
                 end
             end
             NDC: begin
-                if (dividers_busy) begin
+                if (!div0_done) begin
                     state <= NDC;
                     div0_start <= 0;
-                    div1_start <= 0;
-                    div2_start <= 0;
                 end else begin
-                    if (dividers_valid) begin
+                    if (div0_valid) begin
                         state <= VIEWPORT;
-                        vector_latest <= {32'b0, div2_out, div1_out, div0_out};
+                        ndc_prod_x <= vector_latest[0] * div0_out;
+                        ndc_prod_y <= vector_latest[1] * div0_out;
+                        ndc_prod_z <= vector_latest[2] * div0_out;
                         vert_index <= vert_index + 1;
                     end else begin
                         // Division error, discard triangle
@@ -187,9 +174,9 @@ always_ff @(posedge clk_in) begin
                 end
             end
             VIEWPORT: begin
-                out_vert[0] <= $signed(FB_WIDTH_HALF) * (vector_latest[0] + 32'h00010000);
-                out_vert[1] <= $signed(FB_HEIGHT_HALF) * (32'h00010000 - vector_latest[1]);
-                out_vert[2] <= $signed(FAR_MINUS_NEAR_HALF) * vector_latest[2] + ($signed(FAR_PLUS_NEAR_HALF)  << 16);
+                out_vert[0] <= $signed(FB_WIDTH_HALF) * (ndc_prod_x[FP_HIGH:FP_LOW] + 32'h00010000);
+                out_vert[1] <= $signed(FB_HEIGHT_HALF) * (32'h00010000 - ndc_prod_y[FP_HIGH:FP_LOW]);
+                out_vert[2] <= $signed(FAR_MINUS_NEAR_HALF) * ndc_prod_z[FP_HIGH:FP_LOW] + ($signed(FAR_PLUS_NEAR_HALF)  << 16);
                 current_vert <= triangle_verts_reg[vert_index];
                 state <= INIT;
             end
@@ -226,34 +213,6 @@ div #(.WIDTH(COORD_WIDTH), .FBITS(COORD_WIDTH/2)) divider0(
     .a(div0_dividend),
     .b(div0_divider),
     .val(div0_out)
-);
-
-div #(.WIDTH(COORD_WIDTH), .FBITS(COORD_WIDTH/2)) divider1(
-    .clk(clk_in),
-    .rst(rst_in),
-    .start(div1_start),
-    .busy(div1_busy),
-    .done(div1_done),
-    .valid(div1_valid),
-    .dbz(),
-    .ovf(),
-    .a(div1_dividend),
-    .b(div1_divider),
-    .val(div1_out)
-);
-
-div #(.WIDTH(COORD_WIDTH), .FBITS(COORD_WIDTH/2)) divider2(
-    .clk(clk_in),
-    .rst(rst_in),
-    .start(div2_start),
-    .busy(div2_busy),
-    .done(div2_done),
-    .valid(div2_valid),
-    .dbz(),
-    .ovf(),
-    .a(div2_dividend),
-    .b(div2_divider),
-    .val(div2_out)
 );
 
 endmodule
