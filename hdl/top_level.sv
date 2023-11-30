@@ -237,6 +237,7 @@ module top_level(
   // Rasterizer debugging
   always_ff @(posedge clk_pixel) begin
     val_to_display[2:0] <= state_status;
+    val_to_display[5:4] <= proj_status;
     val_to_display[10:8] <= raster_state;
   end
 

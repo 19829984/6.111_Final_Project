@@ -135,14 +135,14 @@ always_ff @(posedge clk_in) begin
                     vector_matrix_start <= 0;
 
                     // Absolute value of vector_out
-                    abs_x <= vector_out[0] < 0 ? -vector_out[0] : vector_out[0];
-                    abs_y <= vector_out[1] < 0 ? -vector_out[1] : vector_out[1];
-                    abs_z <= vector_out[2] < 0 ? -vector_out[2] : vector_out[2];
+                    abs_x <= vector_out[0][31] == 1 ? ~vector_out[0] + 1: vector_out[0];
+                    abs_y <= vector_out[1][31] == 1 ? ~vector_out[1] + 1: vector_out[1];
+                    abs_z <= vector_out[2][31] == 1 ? ~vector_out[2] + 1: vector_out[2];
                     w <= vector_out[3];
                 end
             end
             CLIP: begin
-                if (abs_x > w || abs_y > w || abs_z > w) begin
+                if ((abs_x > w) || (abs_y > w) || (abs_z > w)) begin
                     // Discard triangles that are outside of the view frustum
                     // TODO: Create new triangles from frustum clipping
                     state <= DONE;
@@ -195,6 +195,7 @@ always_ff @(posedge clk_in) begin
             end
             DONE: begin
                 state <= IDLE;
+                done <= 1;
                 busy <= 0;
                 vert_index <= 0;
             end

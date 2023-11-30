@@ -1,6 +1,7 @@
 `timescale 1ns / 1ps
 `default_nettype none
-module rasterizer #(parameter WIREFRAME = 0, parameter COORD_WIDTH = 32) (
+module rasterizer #(parameter WIREFRAME = 0, parameter COORD_WIDTH = 32,
+                    parameter FB_WIDTH = 320, parameter FB_HEIGHT = 180) (
     input wire clk_in,
     input wire rst_in,
     input wire start,
@@ -109,7 +110,7 @@ always_ff @(posedge clk_in) begin
         case (state)
             IDLE: begin
                 if (start) begin
-                    state <= INIT_TRI; //TODO: ???? Why dont this start
+                    state <= INIT_TRI;
                     busy <= 1;
                 end
                 raster_state <= 0;
@@ -164,11 +165,15 @@ end
 always_ff @(posedge clk_in) begin
     x <= out_x;
     y <= out_y;
+    // if (out_x < 0 || out_x >= FB_WIDTH || out_y < 0 || out_y >= FB_HEIGHT) begin
+    //     drawing <= 0;
+    // end else begin
     drawing <= rendering_valid;
+    // end
     proj_status <= projection_status;
 end
 
-project_triangle #(.COORD_WIDTH(COORD_WIDTH)) project (
+project_triangle #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT)) project (
     .clk_in(clk_in),
     .rst_in(rst_in),
     .start(start_projection),
