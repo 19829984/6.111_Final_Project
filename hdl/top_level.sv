@@ -312,46 +312,6 @@ module top_level(
     end
   end
  
-
-  //uncomment the test pattern generator for the latter portion of part 1
-  //and use it to drive tp_r,g, and b once you know that your video
-  //pipeline is working (by seeing the 6.205 pink color)
-  
-  // test_pattern_generator mtpg(
-  //     .sel_in(sw[1:0]),
-  //     .hcount_in(hcount),
-  //     .vcount_in(vcount),
-  //     .red_out(tp_r),
-  //     .green_out(tp_g),
-  //     .blue_out(tp_b));
-  
- 
-  // //uncomment for Part 2 of lab!:
-  
-  // shape_party msp (
-  //     .clk_in(clk_pixel),
-  //     .rst_in(sys_rst),
-  //     .b_con_in(sw[15:12]),
-  //     .c_con_in(sw[11:8]),
-  //     .nf_in(new_frame),
-  //     .hcount_in(hcount),
-  //     .vcount_in(vcount),
-  //     .red_out(sp_r),
-  //     .green_out(sp_g),
-  //     .blue_out(sp_b));
- 
-  // always_comb begin
-  //   if (~sw[2])begin //if switch 2 pushed use shapes signal from part 2, else defaults
-  //     red = tp_r;
-  //     green = tp_g;
-  //     blue = tp_b;
-  //   end else begin
-  //     red = sp_r;
-  //     green = sp_g;
-  //     blue = sp_b;
-  //   end
-  // end
- 
   logic [9:0] tmds_10b [0:2]; //output of each TMDS encoder!
   logic tmds_signal [2:0]; //output of each TMDS serializer!
  
@@ -361,7 +321,7 @@ module top_level(
   //  * control_in[0] = horizontal sync signal
   //  * control_in[1] = vertical sync signal
  
-  localparam COLOR_LATENCY = 5; // 2 from memory read, 3 from color conversion
+  localparam COLOR_LATENCY = 6; // 1 from choosing between two buffers, 2 from memory read, 3 from color conversion
   logic [COLOR_LATENCY-1:0] active_draw_pipe;
   logic [COLOR_LATENCY-1:0] hor_sync_pipe;
   logic [COLOR_LATENCY-1:0] vert_sync_pipe;
