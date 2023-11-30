@@ -17,7 +17,7 @@ module project_triangle #(parameter COORD_WIDTH = 32, parameter FB_HEIGHT = 180,
     output logic done
 );
 localparam FP_HIGH = COORD_WIDTH*2 - COORD_WIDTH/2 - 1;
-localparam FP_LOW = COORD_WIDTH/2;;
+localparam FP_LOW = COORD_WIDTH/2;
 localparam FB_HEIGHT_HALF = FB_HEIGHT / 2;
 localparam FB_WIDTH_HALF = FB_WIDTH / 2;
 localparam FAR_MINUS_NEAR_HALF = (32'h00640000 - 32'h0000199a) / 2; // 100 - 0.1 in Q16.16
