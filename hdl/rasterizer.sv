@@ -95,8 +95,8 @@ always_comb begin
     model_matrix[3][3] = 32'h00010000;
 end
 
-logic [COORD_WIDTH-1:0] out_x, out_y;
-logic [COORD_WIDTH-1:0] x0, y0, x1, y1, x2, y2;
+logic signed [COORD_WIDTH-1:0] out_x, out_y;
+logic signed [COORD_WIDTH-1:0] x0, y0, x1, y1, x2, y2;
 
 enum {IDLE, INIT_TRI, PROJECTING, DRAWING, DONE} state;
 
@@ -106,6 +106,7 @@ always_ff @(posedge clk_in) begin
         busy <= 0;
         start_projection <= 0;
         start_rendering <= 0;
+        done <= 0;
     end else begin
         case (state)
             IDLE: begin
@@ -113,6 +114,7 @@ always_ff @(posedge clk_in) begin
                     state <= INIT_TRI;
                     busy <= 1;
                 end
+                done <= 0;
                 raster_state <= 0;
             end
             INIT_TRI: begin
@@ -165,11 +167,11 @@ end
 always_ff @(posedge clk_in) begin
     x <= out_x;
     y <= out_y;
-    // if (out_x < 0 || out_x >= FB_WIDTH || out_y < 0 || out_y >= FB_HEIGHT) begin
-    //     drawing <= 0;
-    // end else begin
-    drawing <= rendering_valid;
-    // end
+    if ((out_x < $signed(0)) || (out_x >= $signed(FB_WIDTH)) || (out_y < $signed(0)) || (out_y >= $signed(FB_HEIGHT))) begin
+        drawing <= 0;
+    end else begin
+        drawing <= rendering_valid;
+    end
     proj_status <= projection_status;
 end
 
