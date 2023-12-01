@@ -142,7 +142,7 @@ always_ff @(posedge clk_in) begin
                 end
             end
             CLIP: begin
-                if ((abs_x > w) || (abs_y > w) || (abs_z > w)) begin
+                if (abs_z > w) begin
                     // Discard triangles that are outside of the view frustum
                     // TODO: Create new triangles from frustum clipping
                     state <= DONE;

@@ -14,7 +14,8 @@ module rasterizer #(parameter WIREFRAME = 0, parameter COORD_WIDTH = 32,
     output logic [2:0] raster_state,
     output logic [1:0] proj_status,
     output logic busy,
-    output logic done
+    output logic done,
+    output logic signed [31:0] test
 );
 
 logic signed [2:0][2:0][COORD_WIDTH-1:0] triangle_coords;
@@ -31,6 +32,7 @@ logic rendering_valid, projection_valid;
 logic [1:0] projection_status;
 
 always_comb begin
+    test = x0;
     triangle_coords[0][0] = 32'hffff0000; // X
     triangle_coords[0][1] = 32'h00000000; // Y
     triangle_coords[0][2] = 32'hffff0000; // Z
@@ -131,12 +133,12 @@ always_ff @(posedge clk_in) begin
                         start_rendering <= 1;
 
                         // Retrieve results from projection
-                        x0 <= projected_coords[0][0] >> 16;
-                        y0 <= projected_coords[0][1] >> 16;
-                        x1 <= projected_coords[1][0] >> 16;
-                        y1 <= projected_coords[1][1] >> 16;
-                        x2 <= projected_coords[2][0] >> 16;
-                        y2 <= projected_coords[2][1] >> 16;
+                        x0 <= $signed(projected_coords[0][0]) >>> 16;
+                        y0 <= $signed(projected_coords[0][1]) >>> 16;
+                        x1 <= $signed(projected_coords[1][0]) >>> 16;
+                        y1 <= $signed(projected_coords[1][1]) >>> 16;
+                        x2 <= $signed(projected_coords[2][0]) >>> 16;
+                        y2 <= $signed(projected_coords[2][1]) >>> 16;
                     end else begin
                         state <= DONE;
                     end

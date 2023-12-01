@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
-module bresenhamTriangleFill #(parameter COORD_WIDTH = 16) (
+module bresenhamTriangleFill #(parameter COORD_WIDTH = 16, parameter FB_WIDTH = 320, parameter FB_HEIGHT = 180) (
     input wire clk_in,
     input wire rst_in,
     input wire start_draw,
@@ -35,6 +35,8 @@ logic signed [COORD_WIDTH-1:0] prev_xa, prev_xb;
 // Line Drawer Control Signals
 logic oe_a, oe_b, oe_h;
 logic drawing_h;
+//logic in_bounds;
+logic downstream_rst;
 logic busy_a, busy_b, busy_h;
 logic drawing_third_edge;
 
@@ -42,10 +44,15 @@ logic drawing_third_edge;
 // such that they update the cycle after the final coordinate
 logic busy_pipe, done_pipe;
 
+// always_comb begin
+//     //in_bounds = (xh >= 0) && (xh < FB_WIDTH) && (prev_y >= 0) && (prev_y < FB_HEIGHT);
+//     in_bounds = (prev_y >= 0) && (prev_y < FB_HEIGHT);
+// end
+
 always_ff @(posedge clk_in) begin
     x <= xh;
     y <= prev_y;
-    drawing <= drawing_h;
+    drawing <= drawing_h;// && in_bounds;
     busy <= busy_pipe;
     done <= done_pipe;
 end
@@ -65,6 +72,7 @@ always_ff @(posedge clk_in) begin
         busy_pipe <= 0;
         done_pipe <= 0;
         drawing_third_edge <= 0;
+        downstream_rst <= 1;
     end
 
     case (state)
@@ -75,6 +83,7 @@ always_ff @(posedge clk_in) begin
             end
             done_pipe <= 0;
             busy_pipe <= 0;
+            downstream_rst <= 0;
         end
         SORT_0: begin
             state <= SORT_1;
@@ -127,7 +136,11 @@ always_ff @(posedge clk_in) begin
             y1b <= sorted_y1;
             state <= START_A;
             drawing_third_edge <= 0;
-            prev_y <= sorted_y0;
+            if (sorted_y0 < 0) begin
+                prev_y <= 0;
+            end else begin
+                prev_y <= sorted_y0;
+            end
         end
         INIT_B1: begin
             x0b <= sorted_x1;
@@ -136,35 +149,54 @@ always_ff @(posedge clk_in) begin
             y1b <= sorted_y2;
             state <= START_A;
             drawing_third_edge <= 1;
-            prev_y <= sorted_y1;
-        end
-        START_A: state <= START_B;
-        START_B: state <= DRAW_EDGE;
-        DRAW_EDGE: begin
-            if ((ya != prev_y || !busy_a) && (yb != prev_y || !busy_b)) begin
-                state <= START_H;
-                x0h <= (prev_xa > prev_xb) ? prev_xb : prev_xa;
-                x1h <= (prev_xa > prev_xb) ? prev_xa : prev_xb;
+            if (sorted_y1 < 0) begin
+                prev_y <= 0;
+            end else begin
+                prev_y <= sorted_y1;
             end
         end
-        START_H: state <= DRAW_H_LINE;
+        START_A: begin
+            state <= START_B;
+        end
+        START_B: begin
+            state <= DRAW_EDGE;
+        end
+        DRAW_EDGE: begin
+            if ((ya > prev_y || (ya == prev_y && !busy_a)) && (yb > prev_y || (yb == prev_y && !busy_b))) begin
+                if (yb < 0) begin
+                    prev_y <= 0;
+                end else begin
+                    state <= START_H;
+                    x0h <= (prev_xa > prev_xb) ? prev_xb : prev_xa;
+                    x1h <= (prev_xa > prev_xb) ? prev_xa : prev_xb;
+                end
+            end
+        end
+        START_H: begin
+            state <= DRAW_H_LINE;
+        end
         DRAW_H_LINE: begin
             if (!busy_h) begin
-                prev_y <= yb;
-                prev_xa <= xa;
-                prev_xb <= xb;
+                if (yb < FB_HEIGHT) begin
+                    prev_y <= yb;
+                    prev_xa <= xa;
+                    prev_xb <= xb;
 
-                // Check if we're done drawing one of the short edges
-                // If so go to INIT_B1 to draw the third edge
-                if (!busy_b) begin
-                    state <= (busy_a && drawing_third_edge == 0) ? INIT_B1 : DONE;
-                end else state <= DRAW_EDGE;
+                    // Check if we're done drawing one of the short edges
+                    // If so go to INIT_B1 to draw the third edge
+                    if (!busy_b) begin
+                        state <= (busy_a && drawing_third_edge == 0) ? INIT_B1 : DONE;
+                    end else state <= DRAW_EDGE;
+                end else begin
+                    state <= DONE;
+                end
             end
         end
         DONE: begin
             state <= IDLE;
             done_pipe <= 1;
             busy_pipe <= 0;
+            downstream_rst <= 1;
         end
     endcase
 end
@@ -172,14 +204,14 @@ end
 always_comb begin
     // Only continue drawing on A and B when prev_y is updated to their last y output
     // This makes it so that they stop when they advance to the next y value
-    oe_a = (state == DRAW_EDGE && ya == prev_y);
-    oe_b = (state == DRAW_EDGE && yb == prev_y);
-    oe_h = oe;
+    oe_a = (state == DRAW_EDGE && ya <= prev_y);
+    oe_b = (state == DRAW_EDGE && yb <= prev_y);
+    oe_h = (state == DRAW_H_LINE && oe);
 end
 
-bresenhamLine #(.COORD_WIDTH(COORD_WIDTH)) line_drawer_a (
+bresenhamLine #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT)) line_drawer_a (
     .clk_in(clk_in),
-    .rst_in(rst_in),
+    .rst_in(downstream_rst),
     .start_draw(state == START_A),
     .oe(oe_a),
     .x0(x0a),
@@ -193,9 +225,9 @@ bresenhamLine #(.COORD_WIDTH(COORD_WIDTH)) line_drawer_a (
     .done()
 );
 
-bresenhamLine #(.COORD_WIDTH(COORD_WIDTH)) line_drawer_b (
+bresenhamLine #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT)) line_drawer_b (
     .clk_in(clk_in),
-    .rst_in(rst_in),
+    .rst_in(downstream_rst),
     .start_draw(state == START_B),
     .oe(oe_b),
     .x0(x0b),
@@ -209,9 +241,9 @@ bresenhamLine #(.COORD_WIDTH(COORD_WIDTH)) line_drawer_b (
     .done()
 );
 
-line1D #(.COORD_WIDTH(COORD_WIDTH)) line_drawer_h (
+line1D #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH)) line_drawer_h (
     .clk_in(clk_in),
-    .rst_in(rst_in),
+    .rst_in(downstream_rst),
     .start_draw(state == START_H),
     .oe(oe_h),
     .x0(x0h),
