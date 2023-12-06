@@ -8,6 +8,7 @@ module computeBarycentric #(parameter COORD_WIDTH = 32) (
     input wire clk_in,
     input wire rst_in,
     input wire signed [2:0][COORD_WIDTH-1:0] p, a, b, c, //Point p and triangle vertices a, b, c
+    input wire valid_in,
     input wire init, // Initialize module with precalculated values
 
     output logic [COORD_WIDTH-1:0] u, v, w,
@@ -18,6 +19,7 @@ module computeBarycentric #(parameter COORD_WIDTH = 32) (
 );
 localparam FP_HIGH = COORD_WIDTH*2 - COORD_WIDTH/2 - 1;
 localparam FP_LOW = COORD_WIDTH/2;
+localparam DELAY = 7;
 
 logic signed [COORD_WIDTH-1:0] dp0_x0, dp0_x1, dp0_x2, dp0_y0, dp0_y1, dp0_y2, dp0_out;
 logic signed [COORD_WIDTH-1:0] dp1_x0, dp1_x1, dp1_x2, dp1_y0, dp1_y1, dp1_y2, dp1_out;
@@ -26,6 +28,8 @@ logic signed [COORD_WIDTH-1:0] d00, d01, d11, d20, d21, invDenom;
 
 logic div0_start, div0_busy, div0_done, div0_valid;
 logic signed [COORD_WIDTH-1:0] div0_dividend, div0_divider, div0_out;
+
+logic [DELAY-1:0] valid_in_pipe;
 
 (* dont_touch = "yes" *) logic signed [2*COORD_WIDTH-1:0] prod_a, prod_b, prod_c, prod_d, w_prod, v_prod;
 
@@ -134,6 +138,7 @@ always_ff @(posedge clk_in) begin
             end
             INIT_DONE: begin
                 state <= INIT_DONE;
+                valid_in_pipe <= {valid_in, valid_in_pipe[DELAY-1:1]};
 
                 // Step 1
                 v2 <= {p[2] - a[2], p[1] - a[1], p[0] - a[0]};
@@ -167,7 +172,7 @@ always_ff @(posedge clk_in) begin
                 u <= $signed(32'h00010000) - v_prod[FP_HIGH:FP_LOW] - w_prod[FP_HIGH:FP_LOW];
                 v <= v_prod[FP_HIGH:FP_LOW];
                 w <= w_prod[FP_HIGH:FP_LOW];
-                valid <= v_prod[FP_HIGH] != 1 && w_prod[FP_HIGH] != 1 && (v_prod[FP_HIGH] + w_prod[FP_HIGH] < $signed(32'h00010000));
+                valid <= valid_in_pipe[0] && v_prod[FP_HIGH] != 1 && w_prod[FP_HIGH] != 1 && (v_prod[FP_HIGH] + w_prod[FP_HIGH] < $signed(32'h00010000));
             end
         endcase
     end
