@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 `default_nettype none
-module project_triangle #(parameter COORD_WIDTH = 32, parameter FB_HEIGHT = 180, parameter FB_WIDTH = 320) (
+module project_triangle #(parameter COORD_WIDTH = 32, parameter DEPTH_BIT_WIDTH = 16, parameter FB_HEIGHT = 180, parameter FB_WIDTH = 320) (
     input wire clk_in,
     input wire rst_in,
     input wire start,
@@ -11,6 +11,7 @@ module project_triangle #(parameter COORD_WIDTH = 32, parameter FB_HEIGHT = 180,
     input wire signed [3:0][3:0][COORD_WIDTH-1:0] projection_matrix,
 
     output logic signed [2:0][2:0][COORD_WIDTH-1:0] projected_verts,
+    output logic [2:0][DEPTH_BIT_WIDTH-1:0] depth,
     output logic valid,
     output logic busy,
     output logic [1:0] status,
@@ -52,7 +53,10 @@ assign dividers_valid = div0_valid && div1_valid && div2_valid;
 
 logic signed [2:0][2:0][COORD_WIDTH-1:0] out_tri;
 logic signed [2:0][COORD_WIDTH-1:0] out_vert;
+logic [2:0][DEPTH_BIT_WIDTH-1:0] out_depth;
+logic [DEPTH_BIT_WIDTH-1:0] out_depth_vert;
 assign projected_verts = out_tri;
+assign depth = out_depth;
 
 enum {IDLE, INIT, MODEL_MATRIX, VIEW_MATRIX, PROJ_MATRIX, CLIP, NDC, VIEWPORT, DONE} state;
 
@@ -101,6 +105,7 @@ always_ff @(posedge clk_in) begin
                 end
                 if (vert_index > 0) begin
                     out_tri[vert_index - 1] <= out_vert;
+                    out_depth[vert_index - 1] <= out_depth_vert;
                 end
             end
             MODEL_MATRIX: begin
@@ -190,6 +195,8 @@ always_ff @(posedge clk_in) begin
                 out_vert[0] <= $signed(FB_WIDTH_HALF) * (vector_latest[0] + 32'h00010000);
                 out_vert[1] <= $signed(FB_HEIGHT_HALF) * (32'h00010000 - vector_latest[1]);
                 out_vert[2] <= $signed(FAR_MINUS_NEAR_HALF) * vector_latest[2] + ($signed(FAR_PLUS_NEAR_HALF)  << 16);
+                //out_depth_vert <= 8'h88;
+                out_depth_vert <= abs_z[COORD_WIDTH-13:COORD_WIDTH-20];
                 current_vert <= triangle_verts_reg[vert_index];
                 state <= INIT;
             end

@@ -87,7 +87,7 @@ module top_level(
   logic drawing;
 
   // Double Frame Buffer and its state machine
-  localparam FB_BIT_WIDTH = 22;
+  localparam FB_BIT_WIDTH = 8;
   localparam FB_WIDTH = 320;
   localparam FB_HEIGHT = 180;
   localparam FB_NUM_PIXELS = FB_WIDTH * FB_HEIGHT;
@@ -98,24 +98,49 @@ module top_level(
   logic [FB_ADDR_WIDTH-1:0] fb_read_addr;
   logic fb_we, fb_front;
 
+  localparam DEPTH_BIT_WIDTH = 16;
+  logic [DEPTH_BIT_WIDTH-1:0] depth_read;
+  logic [DEPTH_BIT_WIDTH-1:0] depth_write_num;
+  logic [FB_ADDR_WIDTH-1:0] depth_write_addr;
+  logic [FB_ADDR_WIDTH-1:0] depth_read_addr;
+  logic dp_we, dp_re;
+
+  logic [DEPTH_BIT_WIDTH-1:0] raster_depth;
+  logic [DEPTH_BIT_WIDTH-1:0] clearing_depth;
+  assign depth_write_num = fb_state == CLEARING ? clearing_depth : raster_depth;
+
   assign fb_read_addr = hcount_scaled + FB_WIDTH*vcount_scaled;
   assign fb_render_addr = x + FB_WIDTH*y;
-  assign fb_render_color = 22'b1111111111111111111111;
-  // Frame Buffer for 320x180 5656RGBA frame
+  assign fb_render_color = 8'hFF;
+
+  // piped vars
+  logic fb_we_piped;
+  logic dp_we_piped;
+  logic dp_re_piped;
+  logic fb_front_piped;
+  logic [FB_ADDR_WIDTH-1:0] fb_write_addr_piped;
+  logic [FB_BIT_WIDTH-1:0] fb_write_color_piped;
+  logic [FB_ADDR_WIDTH-1:0] depth_write_addr_piped;
+  logic [DEPTH_BIT_WIDTH-1:0] depth_write_num_piped;
+  logic [FB_ADDR_WIDTH-1:0] depth_read_addr_piped;
+
+  logic drawing_store;
+
+  // Frame Buffer for 640x360 565RGB frame
   xilinx_true_dual_port_read_first_2_clock_ram #(
     .RAM_WIDTH(FB_BIT_WIDTH),
     .RAM_DEPTH(FB_NUM_PIXELS))
     frame_buffer_1 (
-    .addra(fb_write_addr), //pixels are stored using this math
+    .addra(fb_write_addr_piped), //pixels are stored using this math
     .clka(clk_pixel),
-    .wea(fb_we && fb_front),
-    .dina(fb_write_color),
+    .wea(fb_we_piped && fb_front_piped),
+    .dina(fb_write_color_piped),
     .ena(1'b1),
     .regcea(1'b1),
     .rsta(sys_rst),
     .douta(), //never read from this side
     .addrb(fb_read_addr),//transformed lookup pixel
-    .dinb(16'b0),
+    .dinb(8'b0),
     .clkb(clk_pixel),
     .web(1'b0),
     .enb(valid_scaled_addr),
@@ -124,21 +149,20 @@ module top_level(
     .doutb(fb_read_1)
   );
 
-  // Frame Buffer for 320x180 5656RGBA frame
   xilinx_true_dual_port_read_first_2_clock_ram #(
     .RAM_WIDTH(FB_BIT_WIDTH),
     .RAM_DEPTH(FB_NUM_PIXELS))
     frame_buffer_2 (
-    .addra(fb_write_addr), //pixels are stored using this math
+    .addra(fb_write_addr_piped), //pixels are stored using this math
     .clka(clk_pixel),
-    .wea(fb_we && ~fb_front),
-    .dina(fb_write_color),
+    .wea(fb_we_piped && ~fb_front_piped),
+    .dina(fb_write_color_piped),
     .ena(1'b1),
     .regcea(1'b1),
     .rsta(sys_rst),
     .douta(), //never read from this side
     .addrb(fb_read_addr),//transformed lookup pixel
-    .dinb(16'b0),
+    .dinb(8'b0),
     .clkb(clk_pixel),
     .web(1'b0),
     .enb(valid_scaled_addr),
@@ -147,10 +171,58 @@ module top_level(
     .doutb(fb_read_2)
   );
   
+  xilinx_true_dual_port_read_first_2_clock_ram #(
+    .RAM_WIDTH(DEPTH_BIT_WIDTH),
+    .RAM_DEPTH(FB_NUM_PIXELS))
+    depth_buffer (
+     .addra(depth_write_addr_piped), 
+     .clka(clk_pixel),
+     .wea(dp_we_piped),
+     .dina(depth_write_num_piped),
+     .ena(1'b1),
+     .regcea(1'b1),
+     .rsta(sys_rst),
+     .douta(), //never read from this side
+     .addrb(depth_read_addr_piped),
+     .dinb(16'b0),
+     .clkb(clk_pixel),
+     .web(1'b0),
+     .enb(dp_re_piped),
+     .rstb(sys_rst),
+     .regceb(1'b1),
+     .doutb(depth_read)
+  );
+
+  depth_writer #(.FB_BIT_WIDTH(FB_BIT_WIDTH), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH), .FB_ADDR_WIDTH(FB_ADDR_WIDTH)) depth_pipe (
+    .clk_in(clk_pixel),
+    .rst_in(sys_rst),
+    .drawing_in(drawing_store),
+    .fb_we_in(fb_we), 
+    .dp_we_in(dp_we), 
+    .dp_re_in(dp_re), 
+    .fb_front_in(fb_front),
+    .fb_write_in(fb_write_addr),
+    .fb_value_in(fb_write_color),
+    .dp_read_in(depth_read),
+    .dp_write_in(depth_write_addr),
+    .dp_value_in(depth_write_num),
+    .fb_we_out(fb_we_piped), 
+    .dp_we_out(dp_we_piped), 
+    .dp_re_out(dp_re_piped), 
+    .fb_front_out(fb_front_piped),
+    .fb_write_out(fb_write_addr_piped),
+    .fb_value_out(fb_write_color_piped),
+    .dp_read_addr_out(depth_read_addr_piped),
+    .dp_write_out(depth_write_addr_piped),
+    .dp_value_out(depth_write_num_piped)
+  );
+
+
   enum {IDLE, INIT, CLEARING, DRAW, DONE} fb_state;
   logic start_render;
   logic render_done;
   logic [2:0] state_status;
+  logic[8:0] test_incr;
   always_ff @(posedge clk_pixel) begin
     if (sys_rst) begin
       fb_state <= IDLE;
@@ -166,11 +238,19 @@ module top_level(
           fb_state <= CLEARING;
           fb_front <= ~fb_front;
           fb_clear_addr <= 0;
-          fb_clear_color <= 22'b0000000000000000000000;
+          fb_clear_color <= 8'h00;
           state_status <= 1;
+
+          depth_write_addr <= 0;
+          clearing_depth <= 16'h0000 + test_incr;
+          test_incr <= 0;//test_incr + 1;
+          //depth_write_num <= 16'hFFFF;
         end
         CLEARING: begin
           fb_clear_addr <= fb_clear_addr + 1;
+          clearing_depth <= 16'h0000 + test_incr;
+          test_incr <= test_incr + 1;
+          depth_write_addr <= depth_write_addr + 1;
           if (fb_clear_addr == FB_NUM_PIXELS - 1) begin
             fb_state <= DRAW;
             start_render <= 1;
@@ -196,14 +276,21 @@ module top_level(
       endcase
     end
   end
+
+
   logic signed [COORD_WIDTH-1:0] x_input;
   logic signed [COORD_WIDTH-1:0] y_input;
   logic signed [COORD_WIDTH-1:0] z_input;
   always_ff @(posedge clk_pixel) begin
+    dp_re <= 1;
+
     fb_write_addr <= (fb_state == CLEARING) ? fb_clear_addr : fb_render_addr;
     fb_write_color <= (fb_state == CLEARING) ? fb_clear_color : fb_render_color;
     fb_read <= fb_front ? fb_read_2 : fb_read_1;
     fb_we <= (fb_state == CLEARING) || (drawing);
+    dp_we <= (fb_state == CLEARING) || (drawing);
+    drawing_store <= drawing;
+
     if (new_frame) begin
       if (sw[3]) begin
         x_input <= x_input + 32'h0000019a;
@@ -245,7 +332,7 @@ module top_level(
 
   // Rendering
   // TODO: Discard x and y values outside of the screen coordinates
-  rasterizer #(.COORD_WIDTH(COORD_WIDTH)) rasterize (
+  rasterizer #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH)) rasterize (
     .clk_in(clk_pixel),
     .rst_in(sys_rst),
     .start(start_render),
@@ -254,6 +341,7 @@ module top_level(
     .z_in(z_input),
     .x(x),
     .y(y),
+    .depth(raster_depth),
     .raster_state(raster_state),
     .drawing(drawing),
     .proj_status(proj_status),
@@ -292,15 +380,15 @@ module top_level(
   logic [7:0] red, green, blue, depth; //red green and blue pixel values for output
   logic [7:0] converted_r, converted_g, converted_b; //converted values for output
   
-  color_conversion col_converter(
-    .clk_in(clk_pixel),
-    .red_in(fb_read[21:17]),
-    .green_in(fb_read[16:11]),
-    .blue_in(fb_read[10:6]),
-    .red_out(converted_r),
-    .green_out(converted_g),
-    .blue_out(converted_b)
-  );
+  // color_conversion col_converter(
+  //   .clk_in(clk_pixel),
+  //   .red_in(fb_read),
+  //   .green_in(fb_read),
+  //   .blue_in(fb_read),
+  //   .red_out(converted_r),
+  //   .green_out(converted_g),
+  //   .blue_out(converted_b)
+  // );
 
   always_comb begin
     if (~sw[2])begin //if switch 2 pushed use shapes signal from part 2, else defaults
@@ -308,10 +396,12 @@ module top_level(
       green = tp_g;
       blue = tp_b;
     end else begin
-      red = converted_r;
-      green = converted_g;
-      blue = converted_b;
-      // depth = fb_read_1[5:0];
+      // red = converted_r;
+      // green = converted_g;
+      // blue = converted_b;
+      red = fb_read;
+      green = fb_read;
+      blue = fb_read;
     end
   end
  
