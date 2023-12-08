@@ -6,12 +6,12 @@ module barycentric_tb();
   logic clk_in;
   logic rst_in;
   
-logic signed [2:0][31:0] p, a, b, c;
+logic signed [2:0][63:0] p, a, b, c;
 logic init, valid, valid_in, init_done, busy, done;
 
-logic [31:0] u, v, w;
+logic [63:0] u, v, w;
 
-computeBarycentric #(.COORD_WIDTH(32)) barycentric (
+computeBarycentric #(.COORD_WIDTH(64)) barycentric (
   .clk_in(clk_in),
   .rst_in(rst_in),
   .p(p),
@@ -43,21 +43,21 @@ localparam SF = $pow(2.0, -16.0);
     rst_in = 0;
     init = 0;
     valid_in = 0;
-    p[0] = 32'h00000000;
-    p[1] = 32'h00000000;
-    p[2] = 32'h00000000;
+    p[0] = 32'h00CB0000 <<< 16;
+    p[1] = 32'h002E0000 <<< 16;
+    p[2] = 32'h00010000 <<< 16;
 
-    a[0] = 32'hffff0000;
-    a[1] = 32'h00000000;
-    a[2] = 32'hffff0000;
+    a[0] = 32'h0080F5C0 <<< 16;
+    a[1] = 32'h003AF656 <<< 16;
+    a[2] = 32'h00010000 <<< 16;
 
-    b[0] = 32'h00010000;
-    b[1] = 32'h00000000;
-    b[2] = 32'hffff0000;
+    b[0] = 32'h00BF09A0 << 16;
+    b[1] = 32'h003AF656 << 16;
+    b[2] = 32'h00010000 << 16;
 
-    c[0] = 32'h00010000;
-    c[1] = 32'h00000000;
-    c[2] = 32'h00010000;
+    c[0] = 32'h00CB7460 <<< 16;
+    c[1] = 32'h002E8B82 <<< 16;
+    c[2] = 32'h00010000 <<< 16;
 
     #10;
     rst_in = 1;
@@ -66,26 +66,26 @@ localparam SF = $pow(2.0, -16.0);
     init = 1;
     #10;
     init = 0;
-    #1000;
-    p[2] = 32'hffff8000;
-    p[0] = 32'h00008000;
+    // #1000;
+    // p[2] = 32'hffff8000;
+    // p[0] = 32'h00008000;
+    // valid_in = 1;
+    // #10;
+    // valid_in = 0;
+    // #10;
+    // p[2] = 32'hffff8000;
+    // p[0] = 32'h00004000;
+    // valid_in = 1;
+    // #10;
+    // valid_in = 0;
+    // #10;
+    // p[2] = 32'h00008000;
+    // p[1] = 32'h00010000;
+    // p[0] = 32'h00004000;
     valid_in = 1;
     #10;
     valid_in = 0;
-    #10;
-    p[2] = 32'hffff8000;
-    p[0] = 32'h00004000;
-    valid_in = 1;
-    #10;
-    valid_in = 0;
-    #10;
-    p[2] = 32'h00008000;
-    p[1] = 32'h00010000;
-    p[0] = 32'h00002000;
-    valid_in = 1;
-    #10;
-    valid_in = 0;
-    #1000;
+    #10000;
     $display("Simulation finished");
     $finish;
   end

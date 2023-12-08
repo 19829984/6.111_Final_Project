@@ -7,7 +7,7 @@
 module computeBarycentric #(parameter COORD_WIDTH = 32) (
     input wire clk_in,
     input wire rst_in,
-    input wire signed [2:0][COORD_WIDTH-1:0] p, a, b, c, //Point p and triangle vertices a, b, c
+    input wire signed [2:0][COORD_WIDTH/2-1:0] p, a, b, c, //Point p and triangle vertices a, b, c
     input wire valid_in,
     input wire init, // Initialize module with precalculated values
 
@@ -19,19 +19,21 @@ module computeBarycentric #(parameter COORD_WIDTH = 32) (
 );
 localparam FP_HIGH = COORD_WIDTH*2 - COORD_WIDTH/2 - 1;
 localparam FP_LOW = COORD_WIDTH/2;
-localparam DELAY = 7;
+localparam ONE = 1 <<< COORD_WIDTH/2;
+localparam DELAY = 8;
 
-logic signed [COORD_WIDTH-1:0] dp0_x0, dp0_x1, dp0_x2, dp0_y0, dp0_y1, dp0_y2, dp0_out;
-logic signed [COORD_WIDTH-1:0] dp1_x0, dp1_x1, dp1_x2, dp1_y0, dp1_y1, dp1_y2, dp1_out;
-logic signed [2:0][COORD_WIDTH-1:0] v0, v1, v2;
-logic signed [COORD_WIDTH-1:0] d00, d01, d11, d20, d21, invDenom;
+logic signed [COORD_WIDTH/2-1:0] dp0_x0, dp0_x1, dp0_x2, dp0_y0, dp0_y1, dp0_y2, dp0_out;
+logic signed [COORD_WIDTH/2-1:0] dp1_x0, dp1_x1, dp1_x2, dp1_y0, dp1_y1, dp1_y2, dp1_out;
+logic signed [2:0][COORD_WIDTH/2-1:0] v0, v1, v2;
+logic signed [COORD_WIDTH/2-1:0] d00, d01, d11;
 
 logic div0_start, div0_busy, div0_done, div0_valid;
 logic signed [COORD_WIDTH-1:0] div0_dividend, div0_divider, div0_out;
 
 logic [DELAY-1:0] valid_in_pipe;
 
-(* dont_touch = "yes" *) logic signed [2*COORD_WIDTH-1:0] prod_a, prod_b, prod_c, prod_d, w_prod, v_prod;
+(* dont_touch = "yes" *) logic signed [COORD_WIDTH-1:0] prod_a, prod_b, prod_c, prod_d, invDenom;
+(* dont_touch = "yes" *) logic signed [2*COORD_WIDTH-1:0] w_prod, v_prod;
 
 enum {IDLE, INIT_D11, AWAIT_INIT, AWAIT_INIT_2, D00_D01_DONE, D11_DONE, START_DIV, AWAIT_DIVIDER, INIT_DONE} state;
 
@@ -113,8 +115,8 @@ always_ff @(posedge clk_in) begin
             end
             START_DIV: begin
                 div0_start <= 1;
-                div0_dividend <= 32'h00010000;
-                div0_divider <= prod_a[FP_HIGH:FP_LOW] - prod_b[FP_HIGH:FP_LOW];
+                div0_dividend <= ONE;
+                div0_divider <= prod_a - prod_b;
                 state <= AWAIT_DIVIDER;
             end
             AWAIT_DIVIDER: begin
@@ -165,42 +167,38 @@ always_ff @(posedge clk_in) begin
                 prod_d <= dp0_out * d01;
 
                 // Step 4
-                v_prod <= $signed(prod_a[FP_HIGH:FP_LOW] - prod_b[FP_HIGH:FP_LOW]) * invDenom;
-                w_prod <= $signed(prod_c[FP_HIGH:FP_LOW] - prod_d[FP_HIGH:FP_LOW]) * invDenom;
+                v_prod <= (prod_a - prod_b) * invDenom;
+                w_prod <= (prod_c - prod_d) * invDenom;
 
                 // Step 5
-                u <= $signed(32'h00010000) - v_prod[FP_HIGH:FP_LOW] - w_prod[FP_HIGH:FP_LOW];
+                u <= $signed(ONE) - ($signed(v_prod[FP_HIGH:FP_LOW]) + $signed(w_prod[FP_HIGH:FP_LOW]));
                 v <= v_prod[FP_HIGH:FP_LOW];
                 w <= w_prod[FP_HIGH:FP_LOW];
-                valid <= valid_in_pipe[0] && v_prod[FP_HIGH] != 1 && w_prod[FP_HIGH] != 1 && (v_prod[FP_HIGH] + w_prod[FP_HIGH] < $signed(32'h00010000));
+                valid <= valid_in_pipe[0] && v_prod[FP_HIGH] != 1 && w_prod[FP_HIGH] != 1 && (v_prod[FP_HIGH] + w_prod[FP_HIGH] < $signed(ONE));
             end
         endcase
     end
 end
 
-dotProduct #(.FIXED_POINT(1), .WIDTH(COORD_WIDTH)) dotProduct0 (
+dotProduct_3 #(.FIXED_POINT(1), .WIDTH(COORD_WIDTH/2)) dotProduct0 (
     .clk_in(clk_in),
     .x0(dp0_x0),
     .x1(dp0_x1),
     .x2(dp0_x2),
-    .x3(32'h0),
     .y0(dp0_y0),
     .y1(dp0_y1),
     .y2(dp0_y2),
-    .y3(32'h0),
     .out(dp0_out)
 );
 
-dotProduct #(.FIXED_POINT(1), .WIDTH(COORD_WIDTH)) dotProduct1 (
+dotProduct_3 #(.FIXED_POINT(1), .WIDTH(COORD_WIDTH/2)) dotProduct1 (
     .clk_in(clk_in),
     .x0(dp1_x0),
     .x1(dp1_x1),
     .x2(dp1_x2),
-    .x3(32'h0),
     .y0(dp1_y0),
     .y1(dp1_y1),
     .y2(dp1_y2),
-    .y3(32'h0),
     .out(dp1_out)
 );
 
