@@ -106,6 +106,7 @@ always_ff @(posedge clk_in) begin
                 if (vert_index > 0) begin
                     out_tri[vert_index - 1] <= out_vert;
                     out_depth[vert_index - 1] <= out_depth_vert;
+                    //out_depth[vert_index - 1] <= out_vert[2][COORD_WIDTH/2+DEPTH_BIT_WIDTH/2-1:COORD_WIDTH/2-DEPTH_BIT_WIDTH];
                 end
             end
             MODEL_MATRIX: begin
@@ -196,7 +197,8 @@ always_ff @(posedge clk_in) begin
                 out_vert[1] <= $signed(FB_HEIGHT_HALF) * (32'h00010000 - vector_latest[1]);
                 out_vert[2] <= $signed(FAR_MINUS_NEAR_HALF) * vector_latest[2] + ($signed(FAR_PLUS_NEAR_HALF)  << 16);
                 //out_depth_vert <= 8'h88;
-                out_depth_vert <= abs_z[COORD_WIDTH-13:COORD_WIDTH-20];
+                out_depth_vert <= abs_z[COORD_WIDTH-15:COORD_WIDTH-22];
+                //out_depth_vert <= ($signed(FAR_MINUS_NEAR_HALF) * vector_latest[2] + ($signed(FAR_PLUS_NEAR_HALF)  << 16))[COORD_WIDTH-1:COORD_WIDTH-DEPTH_BIT_WIDTH] // get top (Depthwidth) bits
                 current_vert <= triangle_verts_reg[vert_index];
                 state <= INIT;
             end

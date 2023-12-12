@@ -12,8 +12,8 @@ module dotProduct #(parameter FIXED_POINT = 0, parameter WIDTH = 32) (
     output logic signed [WIDTH-1:0] out
 );
 localparam FP_HIGH = WIDTH*2 - WIDTH/2 - 1;
-localparam FP_LOW = WIDTH/2;;
-(* dont_touch = "yes" *) logic signed [2*WIDTH-1:0] xy0, xy1, xy2, xy3;
+localparam FP_LOW = WIDTH/2;
+logic signed [2*WIDTH-1:0] xy0, xy1, xy2, xy3;
 logic signed [WIDTH-1:0] sum, sum_01, sum_23;
 
 assign out = sum;
@@ -29,8 +29,7 @@ always_ff @(posedge clk_in) begin
     if (FIXED_POINT) begin
         sum_01 <= xy0[FP_HIGH:FP_LOW] + xy1[FP_HIGH:FP_LOW];
         sum_23 <= xy2[FP_HIGH:FP_LOW] + xy3[FP_HIGH:FP_LOW];
-    end
-    else begin
+    end else begin
         sum_01 <= xy0 + xy1;
         sum_23 <= xy2 + xy3;
     end
