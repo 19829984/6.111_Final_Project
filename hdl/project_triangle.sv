@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 `default_nettype none
-module project_triangle #(parameter COORD_WIDTH = 32, parameter DEPTH_BIT_WIDTH = 16, parameter FB_HEIGHT = 180, parameter FB_WIDTH = 320) (
+module project_triangle #(parameter COORD_WIDTH = 32, parameter FB_HEIGHT = 180, parameter FB_WIDTH = 320) (
     input wire clk_in,
     input wire rst_in,
     input wire start,
@@ -10,13 +10,15 @@ module project_triangle #(parameter COORD_WIDTH = 32, parameter DEPTH_BIT_WIDTH 
     input wire signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix,
     input wire signed [3:0][3:0][COORD_WIDTH-1:0] projection_matrix,
 
-    output logic signed [2:0][2:0][COORD_WIDTH-1:0] projected_verts,
-    output logic [2:0][DEPTH_BIT_WIDTH-1:0] depth,
+    output logic signed [2:0][3:0][COORD_WIDTH-1:0] projected_verts,
     output logic valid,
     output logic busy,
     output logic [1:0] status,
     output logic done
 );
+localparam ONE = 1 <<< COORD_WIDTH/2;
+localparam FP_HIGH = COORD_WIDTH*2 - COORD_WIDTH/2 - 1;
+localparam FP_LOW = COORD_WIDTH/2;
 localparam FB_HEIGHT_HALF = FB_HEIGHT / 2;
 localparam FB_WIDTH_HALF = FB_WIDTH / 2;
 localparam FAR_MINUS_NEAR_HALF = (32'h00640000 - 32'h0000199a) / 2; // 100 - 0.1 in Q16.16
@@ -36,29 +38,18 @@ logic vector_matrix_busy, vector_matrix_done;
 logic [1:0] vert_index;
 logic signed [2:0][COORD_WIDTH-1:0] current_vert;
 
-logic signed [COORD_WIDTH-1:0] abs_x, abs_y, abs_z, w;
+logic signed [COORD_WIDTH-1:0] clip_x, clip_y, clip_z, abs_x, abs_y, abs_z, w, inv_w;
 
 logic div0_start, div0_busy, div0_done, div0_valid;
 logic signed [COORD_WIDTH-1:0] div0_dividend, div0_divider, div0_out;
 
-logic div1_start, div1_busy, div1_done, div1_valid;
-logic signed [COORD_WIDTH-1:0] div1_dividend, div1_divider, div1_out;
+logic signed [COORD_WIDTH-1:0] viewport_x_int, viewport_y_int;
 
-logic div2_start, div2_busy, div2_done, div2_valid;
-logic signed [COORD_WIDTH-1:0] div2_dividend, div2_divider, div2_out;
-
-logic dividers_busy, dividers_valid;
-assign dividers_busy = ~(div0_done && div1_done && div2_done);
-assign dividers_valid = div0_valid && div1_valid && div2_valid;
-
-logic signed [2:0][2:0][COORD_WIDTH-1:0] out_tri;
-logic signed [2:0][COORD_WIDTH-1:0] out_vert;
-logic [2:0][DEPTH_BIT_WIDTH-1:0] out_depth;
-logic [DEPTH_BIT_WIDTH-1:0] out_depth_vert;
+logic signed [2*COORD_WIDTH-1:0] prod_x, prod_y, prod_z, viewport_x, viewport_y, viewport_z, viewport_z_int;
+logic signed [2:0][3:0][COORD_WIDTH-1:0] out_tri;
 assign projected_verts = out_tri;
-assign depth = out_depth;
 
-enum {IDLE, INIT, MODEL_MATRIX, VIEW_MATRIX, PROJ_MATRIX, CLIP, NDC, VIEWPORT, DONE} state;
+enum {IDLE, INIT, MODEL_MATRIX, VIEW_MATRIX, PROJ_MATRIX, CLIP, NDC, VIEWPORT1, VIEWPORT2, DONE} state;
 
 always_ff @(posedge clk_in) begin
     if (rst_in) begin
@@ -104,8 +95,7 @@ always_ff @(posedge clk_in) begin
                     vector_matrix_start <= 1;
                 end
                 if (vert_index > 0) begin
-                    out_tri[vert_index - 1] <= out_vert;
-                    out_depth[vert_index - 1] <= out_depth_vert;
+                    out_tri[vert_index - 1] <= {inv_w, viewport_z[FP_HIGH:FP_LOW], viewport_y[FP_HIGH:FP_LOW], viewport_x[FP_HIGH:FP_LOW]};
                 end
             end
             MODEL_MATRIX: begin
@@ -155,32 +145,30 @@ always_ff @(posedge clk_in) begin
                     done <= 1;
                     status <= 2'b01;
                 end else begin
-                    state <= NDC;
+                state <= NDC;
 
-                    // Initialize the dividers
-                    div0_dividend <= vector_out[0];
-                    div0_divider <= vector_out[3];
+                    // Initialize the divider
+                    // Calculate 1/w
+                    div0_dividend <= (COORD_WIDTH'('b1) <<< COORD_WIDTH/2);
+                    div0_divider <= $signed(w);
                     div0_start <= 1;
 
-                    div1_dividend <= vector_out[1];
-                    div1_divider <= vector_out[3];
-                    div1_start <= 1;
-
-                    div2_dividend <= vector_out[2];
-                    div2_divider <= vector_out[3];
-                    div2_start <= 1;
+                    clip_x <= $signed(vector_latest[0]);
+                    clip_y <= $signed(vector_latest[1]);
+                    clip_z <= $signed(vector_latest[2]);
                 end
             end
             NDC: begin
-                if (dividers_busy) begin
+                if (!div0_done) begin
                     state <= NDC;
                     div0_start <= 0;
-                    div1_start <= 0;
-                    div2_start <= 0;
                 end else begin
-                    if (dividers_valid) begin
-                        state <= VIEWPORT;
-                        vector_latest <= {32'b0, div2_out, div1_out, div0_out};
+                    if (div0_valid) begin
+                        state <= VIEWPORT1;
+                        prod_x <= clip_x * div0_out;
+                        prod_y <= clip_y * div0_out;
+                        prod_z <= clip_z * div0_out;
+                        inv_w <= div0_out;
                         vert_index <= vert_index + 1;
                     end else begin
                         // Division error, discard triangle
@@ -191,12 +179,16 @@ always_ff @(posedge clk_in) begin
                     end
                 end
             end
-            VIEWPORT: begin
-                out_vert[0] <= $signed(FB_WIDTH_HALF) * (vector_latest[0] + 32'h00010000);
-                out_vert[1] <= $signed(FB_HEIGHT_HALF) * (32'h00010000 - vector_latest[1]);
-                out_vert[2] <= $signed(FAR_MINUS_NEAR_HALF) * vector_latest[2] + ($signed(FAR_PLUS_NEAR_HALF)  << 16);
-                //out_depth_vert <= 8'h88;
-                out_depth_vert <= abs_z[COORD_WIDTH-13:COORD_WIDTH-20];
+            VIEWPORT1: begin
+                viewport_x_int <= $signed(prod_x >> COORD_WIDTH/2) + $signed(ONE);
+                viewport_y_int <= $signed(ONE) - $signed(prod_y >> COORD_WIDTH/2);
+                viewport_z_int <= ($signed(FAR_MINUS_NEAR_HALF)) * $signed(prod_z >> COORD_WIDTH/2);
+                state <= VIEWPORT2;
+            end
+            VIEWPORT2: begin
+                viewport_x <= ($signed(FB_WIDTH_HALF) <<< COORD_WIDTH/2) * viewport_x_int;
+                viewport_y <= ($signed(FB_HEIGHT_HALF) <<< COORD_WIDTH/2) * viewport_y_int;
+                viewport_z <= viewport_z_int + ($signed(FAR_PLUS_NEAR_HALF) <<< COORD_WIDTH/2);
                 current_vert <= triangle_verts_reg[vert_index];
                 state <= INIT;
             end
@@ -233,34 +225,6 @@ div #(.WIDTH(COORD_WIDTH), .FBITS(COORD_WIDTH/2)) divider0(
     .a(div0_dividend),
     .b(div0_divider),
     .val(div0_out)
-);
-
-div #(.WIDTH(COORD_WIDTH), .FBITS(COORD_WIDTH/2)) divider1(
-    .clk(clk_in),
-    .rst(rst_in),
-    .start(div1_start),
-    .busy(div1_busy),
-    .done(div1_done),
-    .valid(div1_valid),
-    .dbz(),
-    .ovf(),
-    .a(div1_dividend),
-    .b(div1_divider),
-    .val(div1_out)
-);
-
-div #(.WIDTH(COORD_WIDTH), .FBITS(COORD_WIDTH/2)) divider2(
-    .clk(clk_in),
-    .rst(rst_in),
-    .start(div2_start),
-    .busy(div2_busy),
-    .done(div2_done),
-    .valid(div2_valid),
-    .dbz(),
-    .ovf(),
-    .a(div2_dividend),
-    .b(div2_divider),
-    .val(div2_out)
 );
 
 endmodule

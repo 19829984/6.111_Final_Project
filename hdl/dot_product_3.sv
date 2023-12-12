@@ -11,9 +11,7 @@ module dotProduct_3 #(parameter FIXED_POINT = 0, parameter WIDTH = 32) (
 
     output logic signed [WIDTH-1:0] out
 );
-localparam FP_HIGH = WIDTH*2 - WIDTH/2 - 1;
-localparam FP_LOW = WIDTH/2;
-(* dont_touch = "yes" *) logic signed [2*WIDTH-1:0] xy0, xy1, xy2;
+logic signed [2*WIDTH-1:0] xy0, xy1, xy2;
 logic signed [WIDTH-1:0] sum, sum_01, sum_23;
 
 assign out = sum;
@@ -26,8 +24,8 @@ always_ff @(posedge clk_in) begin
 
     // Step 2
     if (FIXED_POINT) begin
-        sum_01 <= $signed(xy0[FP_HIGH:FP_LOW]) + $signed(xy1[FP_HIGH:FP_LOW]);
-        sum_23 <= $signed(xy2[FP_HIGH:FP_LOW]);
+        sum_01 <= (xy0 + xy1) >>> WIDTH/2;
+        sum_23 <= (xy2) >>> WIDTH/2;
     end
     else begin
         sum_01 <= xy0 + xy1;

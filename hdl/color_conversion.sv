@@ -12,8 +12,8 @@ module color_conversion
     output wire [7:0] green_out,
     output wire [7:0] blue_out
 );
-    (* dont_touch = "yes" *) logic [15:0] r_multiply, g_multiply, b_multiply;
-    (* dont_touch = "yes" *) logic [15:0] r_add, g_add, b_add;
+    logic [15:0] r_multiply, g_multiply, b_multiply;
+    logic [15:0] r_add, g_add, b_add;
     logic [7:0] red_shift, green_shift, blue_shift;
     assign red_out = red_shift;
     assign green_out = green_shift;

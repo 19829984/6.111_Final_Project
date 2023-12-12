@@ -18,10 +18,11 @@ module rasterizer #(parameter WIREFRAME = 0, parameter COORD_WIDTH = 32, paramet
     output logic done,
     output logic signed [31:0] test
 );
+localparam DEPTH_HIGH = (COORD_WIDTH/2) + (DEPTH_BIT_WIDTH/2) - 1;
+localparam DEPTH_LOW = (COORD_WIDTH/2) - (DEPTH_BIT_WIDTH/2);
 
 logic signed [2:0][2:0][COORD_WIDTH-1:0] triangle_coords;
-logic signed [2:0][2:0][COORD_WIDTH-1:0] projected_coords;
-logic [2:0][DEPTH_BIT_WIDTH-1:0] projected_depths;
+logic signed [2:0][3:0][COORD_WIDTH-1:0] projected_coords;
 logic signed [3:0][3:0][COORD_WIDTH-1:0] model_matrix;
 logic signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix;
 logic signed [3:0][3:0][COORD_WIDTH-1:0] projection_matrix;
@@ -34,7 +35,7 @@ logic rendering_valid, projection_valid;
 logic [1:0] projection_status;
 
 always_comb begin
-    test = {projected_depths[0][7:0], projected_depths[1][3:0], projected_depths[2][3:0], x0[15:0]};
+    test = depth;
     triangle_coords[0][0] = 32'hffff0000; // X
     triangle_coords[0][1] = 32'h00000000; // Y
     triangle_coords[0][2] = 32'hffff0000; // Z
@@ -143,12 +144,12 @@ always_ff @(posedge clk_in) begin
                         y2 <= $signed(projected_coords[2][1]) >>> 16;
 
                         // Set max depth
-                        if (projected_depths[0] >= projected_depths[1] && projected_depths[0] >= projected_depths[2]) begin
-                            depth <= projected_depths[0];
-                        end else if (projected_depths[0] >= projected_depths[1] && projected_depths[1] >= projected_depths[2]) begin
-                            depth <= projected_depths[1];
+                        if (projected_coords[0][2] >= projected_coords[1][2] && projected_coords[0][2] >= projected_coords[2][2]) begin
+                            depth <= {~projected_coords[0][2][DEPTH_HIGH], projected_coords[0][2][DEPTH_HIGH-1:DEPTH_LOW]};
+                        end else if (projected_coords[1][2] >= projected_coords[0][2] && projected_coords[1][2] >= projected_coords[2][2]) begin
+                            depth <= {~projected_coords[1][2][DEPTH_HIGH], projected_coords[1][2][DEPTH_HIGH-1:DEPTH_LOW]};
                         end else begin
-                            depth <= projected_depths[2];
+                            depth <= {~projected_coords[2][2][DEPTH_HIGH], projected_coords[2][2][DEPTH_HIGH-1:DEPTH_LOW]};
                         end
                     end else begin
                         state <= DONE;
@@ -188,7 +189,7 @@ always_ff @(posedge clk_in) begin
     proj_status <= projection_status;
 end
 
-project_triangle #(.COORD_WIDTH(COORD_WIDTH), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT)) project (
+project_triangle #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT)) project (
     .clk_in(clk_in),
     .rst_in(rst_in),
     .start(start_projection),
@@ -197,14 +198,13 @@ project_triangle #(.COORD_WIDTH(COORD_WIDTH), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH),
     .view_matrix(view_matrix),
     .projection_matrix(projection_matrix),
     .projected_verts(projected_coords),
-    .depth(projected_depths),
     .busy(projection_busy),
     .valid(projection_valid),
     .status(projection_status),
     .done(projection_done)
 );
 
-bresenhamTriangleFill #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT)) draw_triangle (
+bresenhamTriangleFill #(.COORD_WIDTH(COORD_WIDTH)) draw_triangle (
     .clk_in(clk_in),
     .rst_in(rst_in),
     .start_draw(start_rendering),

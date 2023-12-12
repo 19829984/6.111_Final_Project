@@ -126,7 +126,7 @@ module top_level(
 
   logic drawing_store;
 
-  // Frame Buffer for 640x360 565RGB frame
+  // Frame Buffer for 640x360 8 bit frame
   xilinx_true_dual_port_read_first_2_clock_ram #(
     .RAM_WIDTH(FB_BIT_WIDTH),
     .RAM_DEPTH(FB_NUM_PIXELS))
@@ -171,6 +171,7 @@ module top_level(
     .doutb(fb_read_2)
   );
   
+  // Data stored in Q8.8 format
   xilinx_true_dual_port_read_first_2_clock_ram #(
     .RAM_WIDTH(DEPTH_BIT_WIDTH),
     .RAM_DEPTH(FB_NUM_PIXELS))
@@ -196,6 +197,7 @@ module top_level(
   depth_writer #(.FB_BIT_WIDTH(FB_BIT_WIDTH), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH), .FB_ADDR_WIDTH(FB_ADDR_WIDTH)) depth_pipe (
     .clk_in(clk_pixel),
     .rst_in(sys_rst),
+    .render_depth_buffer(sw[0]),
     .drawing_in(drawing_store),
     .fb_we_in(fb_we), 
     .dp_we_in(dp_we), 
@@ -242,14 +244,15 @@ module top_level(
           state_status <= 1;
 
           depth_write_addr <= 0;
-          clearing_depth <= 16'h0000 + test_incr;
-          test_incr <= 0;//test_incr + 1;
+          clearing_depth <= 16'hFFFF;
+          // clearing_depth <= 16'h0000 + test_incr;
+          // test_incr <= 0;//test_incr + 1;
           //depth_write_num <= 16'hFFFF;
         end
         CLEARING: begin
           fb_clear_addr <= fb_clear_addr + 1;
-          clearing_depth <= 16'h0000 + test_incr;
-          test_incr <= test_incr + 1;
+          // clearing_depth <= 16'h0000 + test_incr;
+          // test_incr <= test_incr + 1;
           depth_write_addr <= depth_write_addr + 1;
           if (fb_clear_addr == FB_NUM_PIXELS - 1) begin
             fb_state <= DRAW;

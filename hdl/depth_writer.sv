@@ -4,6 +4,7 @@
 module depth_writer #(parameter FB_BIT_WIDTH = 16, parameter DEPTH_BIT_WIDTH = 16, parameter FB_ADDR_WIDTH = 100) (
     input wire clk_in,
     input wire rst_in,
+    input wire render_depth_buffer,
     input wire drawing_in,
     input wire fb_we_in, 
     input wire dp_we_in, 
@@ -100,7 +101,12 @@ module depth_writer #(parameter FB_BIT_WIDTH = 16, parameter DEPTH_BIT_WIDTH = 1
                     dp_we_out <= dp_we_mid_3;
                     fb_front_out <= fb_front_mid_3;
                     fb_write_out <= fb_write_mid_3;
-                    fb_value_out <= ~dp_value_mid_3; // usually fb_value_mid_3; this is for debug
+                    // 16 bit to 8 bit conversion
+                    if (render_depth_buffer) begin
+                        fb_value_out <= (~dp_value_mid_3) >> 2; // usually fb_value_mid_3; this is for debug
+                    end else begin
+                        fb_value_out <= fb_value_mid_3;
+                    end
                     dp_write_out <= dp_write_mid_3;
                     dp_value_out <= dp_value_mid_3;
                 end

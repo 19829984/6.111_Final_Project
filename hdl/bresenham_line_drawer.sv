@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
-module bresenhamLine #(parameter COORD_WIDTH = 16, parameter FB_WIDTH = 320, parameter FB_HEIGHT = 180) (
+module bresenhamLine #(parameter COORD_WIDTH = 16) (
     input wire clk_in,
     input wire rst_in,
     input wire start_draw,
@@ -94,6 +94,8 @@ module bresenhamLine #(parameter COORD_WIDTH = 16, parameter FB_WIDTH = 320, par
             state <= IDLE;
             done <= 0;
             busy <= 0;
+            x <= x0;
+            y <= y0;
         end
     end
 endmodule
