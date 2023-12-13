@@ -111,7 +111,6 @@ module top_level(
 
   assign fb_read_addr = hcount_scaled + FB_WIDTH*vcount_scaled;
   assign fb_render_addr = x + FB_WIDTH*y;
-  assign fb_render_color = 8'hFF;
 
   // piped vars
   logic fb_we_piped;
@@ -223,6 +222,7 @@ module top_level(
   // WORLD LOGIC
   logic signed [COORD_WIDTH-1:0] rot_angle;
   logic signed [COORD_WIDTH-1:0] side_angle;
+
   logic signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix;
   logic start_view_matrix;
   logic view_done;
@@ -337,16 +337,16 @@ module top_level(
         z_input <= z_input - 32'h0000019a;
       end
       if (sw[9]) begin
-        rot_angle <= rot_angle + 32'h0100_0000;
+        rot_angle <= rot_angle + 32'h0080_0000;
       end
       if (sw[10]) begin
-        rot_angle <= rot_angle - 32'h0100_0000;
+        rot_angle <= rot_angle - 32'h0080_0000;
       end
       if (sw[11]) begin
-        side_angle <= side_angle + 32'h0100_0000;
+        side_angle <= side_angle + 32'h0080_0000;
       end
       if (sw[12]) begin
-        side_angle <= side_angle - 32'h0100_0000;
+        side_angle <= side_angle - 32'h0080_0000;
       end
     end
     if (sys_rst) begin
@@ -362,7 +362,7 @@ module top_level(
   logic [31:0] raster_test;
   logic [1:0] proj_status;
 
-  // Rasterizer debugging
+  // debugging
   always_ff @(posedge clk_pixel) begin
     //val_to_display[2:0] <= state_status;
     //val_to_display[5:4] <= proj_status;
@@ -374,24 +374,40 @@ module top_level(
 
   // Rendering
   // TODO: Discard x and y values outside of the screen coordinates
-  rasterizer #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH)) rasterize (
+  cube_drawer #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH), .FB_BIT_WIDTH(FB_BIT_WIDTH)) cube_maker (
     .clk_in(clk_pixel),
     .rst_in(sys_rst),
     .start(start_render),
-    .x_in(x_input),
-    .y_in(y_input),
-    .z_in(z_input),
+    .x_corner(0),
+    .y_corner(0),
+    .z_corner(0),
     .view_matrix(view_matrix),
     .x(x),
     .y(y),
-    .depth(raster_depth),
-    .raster_state(raster_state),
+    .color(fb_render_color),
+    .depth(depth),
     .drawing(drawing),
-    .proj_status(proj_status),
     .busy(),
-    .done(render_done),
-    .test(raster_test)
+    .done(render_done)
   );
+  //rasterizer #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH)) rasterize (
+  //  .clk_in(clk_pixel),
+  //  .rst_in(sys_rst),
+  //  .start(start_render),
+  //  .x_in(x_input),
+  //  .y_in(y_input),
+  //  .z_in(z_input),
+  //  .view_matrix(view_matrix),
+  //  .x(x),
+  //  .y(y),
+  //  .depth(raster_depth),
+  //  .raster_state(raster_state),
+  //  .drawing(drawing),
+  //  .proj_status(proj_status),
+  //  .busy(),
+  //  .done(render_done),
+  //  .test(raster_test)
+  //);
   // bresenhamTriangleFill #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT)) draw_triangle (
   //     .clk_in(clk_pixel),
   //     .rst_in(sys_rst),

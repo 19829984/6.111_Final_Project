@@ -5,9 +5,7 @@ module rasterizer #(parameter WIREFRAME = 0, parameter COORD_WIDTH = 32, paramet
     input wire clk_in,
     input wire rst_in,
     input wire start,
-    input wire signed [COORD_WIDTH-1:0] x_in,
-    input wire signed [COORD_WIDTH-1:0] y_in,
-    input wire signed [COORD_WIDTH-1:0] z_in,
+    input wire signed [2:0][2:0][COORD_WIDTH-1:0] triangle_coords,
     input wire signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix,
 
     output logic [COORD_WIDTH-1:0] x, y,
@@ -19,10 +17,9 @@ module rasterizer #(parameter WIREFRAME = 0, parameter COORD_WIDTH = 32, paramet
     output logic done,
     output logic signed [31:0] test
 );
-localparam DEPTH_HIGH = (COORD_WIDTH/2) + (DEPTH_BIT_WIDTH/2) - 1;
-localparam DEPTH_LOW = (COORD_WIDTH/2) - (DEPTH_BIT_WIDTH/2);
+localparam DEPTH_HIGH = (COORD_WIDTH/2) + (DEPTH_BIT_WIDTH/4) - 1;
+localparam DEPTH_LOW = (COORD_WIDTH/2) - (DEPTH_BIT_WIDTH/4);
 
-logic signed [2:0][2:0][COORD_WIDTH-1:0] triangle_coords;
 logic signed [2:0][3:0][COORD_WIDTH-1:0] projected_coords;
 logic signed [3:0][3:0][COORD_WIDTH-1:0] model_matrix;
 //logic signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix;
@@ -37,17 +34,17 @@ logic [1:0] projection_status;
 
 always_comb begin
     test = depth;
-    triangle_coords[0][0] = 32'hffff0000; // X
-    triangle_coords[0][1] = 32'h00000000; // Y
-    triangle_coords[0][2] = 32'hffff0000; // Z
+    //triangle_coords[0][0] = 32'hffff0000; // X
+    //triangle_coords[0][1] = 32'h00000000; // Y
+    //triangle_coords[0][2] = 32'hffff0000; // Z
 
-    triangle_coords[1][0] = 32'h00010000;
-    triangle_coords[1][1] = 32'h00000000;
-    triangle_coords[1][2] = 32'hffff0000;
+    //triangle_coords[1][0] = 32'h00010000;
+    //triangle_coords[1][1] = 32'h00000000;
+    //triangle_coords[1][2] = 32'hffff0000;
 
-    triangle_coords[2][0] = 32'h00010000;
-    triangle_coords[2][1] = 32'h00000000;
-    triangle_coords[2][2] = 32'h00010000;
+    //triangle_coords[2][0] = 32'h00010000;
+    //triangle_coords[2][1] = 32'h00000000;
+    //triangle_coords[2][2] = 32'h00010000;
 
     projection_matrix[0][0] = 32'h00015ba6;
     projection_matrix[0][1] = 32'b0;
@@ -145,14 +142,15 @@ always_ff @(posedge clk_in) begin
                         x2 <= $signed(projected_coords[2][0]) >>> 16;
                         y2 <= $signed(projected_coords[2][1]) >>> 16;
 
-                        // Set max depth
-                        if (projected_coords[0][2] >= projected_coords[1][2] && projected_coords[0][2] >= projected_coords[2][2]) begin
-                            depth <= {~projected_coords[0][2][DEPTH_HIGH], projected_coords[0][2][DEPTH_HIGH-1:DEPTH_LOW]};
-                        end else if (projected_coords[1][2] >= projected_coords[0][2] && projected_coords[1][2] >= projected_coords[2][2]) begin
-                            depth <= {~projected_coords[1][2][DEPTH_HIGH], projected_coords[1][2][DEPTH_HIGH-1:DEPTH_LOW]};
+                        // Set min depth
+                        if (projected_coords[1][2] >= projected_coords[0][2] && projected_coords[2][2] >= projected_coords[0][2]) begin
+                            depth[DEPTH_BIT_WIDTH-1:DEPTH_BIT_WIDTH/2] <= {~projected_coords[0][2][DEPTH_HIGH], projected_coords[0][2][DEPTH_HIGH-1:DEPTH_LOW]};
+                        end else if (projected_coords[0][2] >= projected_coords[1][2] && projected_coords[2][2] >= projected_coords[0][2]) begin
+                            depth[DEPTH_BIT_WIDTH-1:DEPTH_BIT_WIDTH/2] <= {~projected_coords[1][2][DEPTH_HIGH], projected_coords[1][2][DEPTH_HIGH-1:DEPTH_LOW]};
                         end else begin
-                            depth <= {~projected_coords[2][2][DEPTH_HIGH], projected_coords[2][2][DEPTH_HIGH-1:DEPTH_LOW]};
+                            depth[DEPTH_BIT_WIDTH-1:DEPTH_BIT_WIDTH/2] <= {~projected_coords[2][2][DEPTH_HIGH], projected_coords[2][2][DEPTH_HIGH-1:DEPTH_LOW]};
                         end
+                        // there are still bugs
                     end else begin
                         state <= DONE;
                     end
