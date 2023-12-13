@@ -220,8 +220,56 @@ module top_level(
 
 
   // WORLD LOGIC
+  localparam WORLD_SIZE=128;
+  localparam WORLD_BITS=$clog2(WORLD_SIZE);
+
+  logic signed [COORD_WIDTH-1:0] x_input;
+  logic signed [COORD_WIDTH-1:0] y_input;
+  logic signed [COORD_WIDTH-1:0] z_input;
   logic signed [COORD_WIDTH-1:0] rot_angle;
   logic signed [COORD_WIDTH-1:0] side_angle;
+  logic signed [2:0][COORD_WIDTH-1:0] velocity; // unused
+  logic signed [2:0][COORD_WIDTH-1:0] acc; // unused
+
+  logic signed [3*COORD_WIDTH/2:0] world_read;
+  logic [WORLD_BITS-1:0] world_read_addr;
+  //assign world_read_addr = 0;
+
+  logic signed [COORD_WIDTH-1:0] x_corner;
+  logic signed [COORD_WIDTH-1:0] y_corner;
+  logic signed [COORD_WIDTH-1:0] z_corner;
+
+  logic signed [1:0][5:0] world_populator;
+  always_ff @(posedge clk_pixel) begin
+    if (new_frame) begin
+        if (world_populator[0] < 63) begin // draw 16 cubes
+            world_populator[0] = world_populator[0] + 1;
+            world_populator[1] = world_populator[1] + 1;
+        end
+    end
+  end
+
+  xilinx_true_dual_port_read_first_2_clock_ram #(
+    .RAM_WIDTH(3*COORD_WIDTH/2+1), // valid bit then x y z ints
+    .RAM_DEPTH(WORLD_SIZE))
+    world_bram (
+    .addra(world_populator[0]), 
+    .clka(clk_pixel),
+    .wea(1'b1),
+    .dina({1'b1, 13'b0, world_populator[1][5:4], 1'b0, 13'b0, world_populator[1][3:2], 1'b0, 13'b0, world_populator[1][1:0], 1'b0}),
+    .ena(1'b1),
+    .regcea(1'b1),
+    .rsta(sys_rst),
+    .douta(), //never read from this side
+    .addrb(world_read_addr),
+    .web(1'b0),
+    .dinb(8'b0),
+    .clkb(clk_pixel),
+    .enb(1'b1),
+    .rstb(sys_rst),
+    .regceb(1'b1),
+    .doutb(world_read)
+  );
 
   logic signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix;
   logic start_view_matrix;
@@ -238,7 +286,6 @@ module top_level(
     .done(view_done),
     .view_matrix(view_matrix)
   );
-
 
   enum {IDLE, INIT, CLEARING, DRAW, DONE} fb_state;
   logic start_render;
@@ -304,9 +351,6 @@ module top_level(
   end
 
 
-  logic signed [COORD_WIDTH-1:0] x_input;
-  logic signed [COORD_WIDTH-1:0] y_input;
-  logic signed [COORD_WIDTH-1:0] z_input;
   always_ff @(posedge clk_pixel) begin
     dp_re <= 1;
 
@@ -369,27 +413,49 @@ module top_level(
     //val_to_display[10:8] <= raster_state;
     //val_to_display <= {view_matrix[1][3], view_matrix[2][3]};
     //val_to_display <= {view_matrix[1][3][31:24], view_matrix[2][3][31:24], view_matrix[0][0][31:16]};
-    val_to_display <= {view_matrix[2][3][31:16], view_matrix[0][0][31:16]};
+    //val_to_display <= {view_matrix[2][3][31:16], view_matrix[0][0][31:16]};
+    val_to_display <= {sw[15], world_debug, x_corner[23:16], z_corner[31:16]};
   end
 
   // Rendering
   // TODO: Discard x and y values outside of the screen coordinates
-  cube_drawer #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH), .FB_BIT_WIDTH(FB_BIT_WIDTH)) cube_maker (
+
+  logic [6:0] world_debug;
+  world_drawer #(.COORD_WIDTH(COORD_WIDTH), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT), .FB_BIT_WIDTH(FB_BIT_WIDTH), .WORLD_SIZE(WORLD_SIZE), .WORLD_BITS(WORLD_BITS)) world_draw (
     .clk_in(clk_pixel),
     .rst_in(sys_rst),
     .start(start_render),
-    .x_corner(0),
-    .y_corner(0),
-    .z_corner(0),
+    .world_read(world_read),
     .view_matrix(view_matrix),
+    .world_read_addr(world_read_addr),
+    .x_cor(x_corner),
+    .y_cor(y_corner),
+    .z_cor(z_corner),
+    .test(world_debug),
     .x(x),
     .y(y),
-    .color(fb_render_color),
     .depth(depth),
+    .color(fb_render_color),
     .drawing(drawing),
     .busy(),
     .done(render_done)
   );
+  //world_drawer #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH), .FB_BIT_WIDTH(FB_BIT_WIDTH)) cube_maker (
+  //  .clk_in(clk_pixel),
+  //  .rst_in(sys_rst),
+  //  .start(start_render),
+  //  .x_corner(x_corner),
+  //  .y_corner(y_corner),
+  //  .z_corner(z_corner),
+  //  .view_matrix(view_matrix),
+  //  .x(x),
+  //  .y(y),
+  //  .color(fb_render_color),
+  //  .depth(depth),
+  //  .drawing(drawing),
+  //  .busy(),
+  //  .done(render_done)
+  //);
   //rasterizer #(.COORD_WIDTH(COORD_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH)) rasterize (
   //  .clk_in(clk_pixel),
   //  .rst_in(sys_rst),
