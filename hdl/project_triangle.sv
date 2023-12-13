@@ -23,6 +23,8 @@ localparam FB_HEIGHT_HALF = FB_HEIGHT / 2;
 localparam FB_WIDTH_HALF = FB_WIDTH / 2;
 localparam FAR_MINUS_NEAR_HALF = (32'h00640000 - 32'h0000199a) / 2; // 100 - 0.1 in Q16.16
 localparam FAR_PLUS_NEAR_HALF = (32'h00640000 + 32'h0000199a) / 2; // 100 + 0.1 in Q16.16
+localparam FAR_MINUS_NEAR = (32'h00640000 - 32'h0000199a); // 100 - 0.1 in Q16.16
+localparam FAR_PLUS_NEAR = (32'h00640000 + 32'h0000199a); // 100 + 0.1 in Q16.16
 
 // Register input vertices and matrices
 logic signed [2:0][2:0][COORD_WIDTH-1:0] triangle_verts_reg;
@@ -45,7 +47,7 @@ logic signed [COORD_WIDTH-1:0] div0_dividend, div0_divider, div0_out;
 
 logic signed [COORD_WIDTH-1:0] viewport_x_int, viewport_y_int;
 
-logic signed [2*COORD_WIDTH-1:0] prod_x, prod_y, prod_z, viewport_x, viewport_y, viewport_z, viewport_z_int;
+logic signed [2*COORD_WIDTH-1:0] prod_x, prod_y, prod_z, viewport_x, viewport_y, viewport_z, viewport_z_int; //Q32.32
 logic signed [2:0][3:0][COORD_WIDTH-1:0] out_tri;
 assign projected_verts = out_tri;
 

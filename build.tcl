@@ -4,6 +4,7 @@
 # csga324 refers to its package it is in
 # refers to the "speed grade" of the chip
 set partNum xc7s50csga324-1
+# set partNum xc7a100tcsg324-1
 set outputDir obj
 file mkdir $outputDir
 set files [glob -nocomplain "$outputDir/*"]
@@ -25,6 +26,11 @@ read_xdc ./xdc/top_level.xdc
 
 # set the part number so Vivado knows how to build (each FPGA is different)
 set_part $partNum
+
+# Read in all IP
+read_ip ./ip/mult1Q3232Q6464/mult1Q3232Q6464.xci
+generate_target all [get_ips]
+synth_ip [get_ips]
 
 #Run Synthesis
 synth_design -top top_level -part $partNum -verbose

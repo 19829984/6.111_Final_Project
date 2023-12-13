@@ -7,14 +7,14 @@ logic clk_in;
 logic rst_in;
 logic start_render;
 logic drawing, done;
-logic signed [31:0] y_in, z_in;
+logic signed [31:0] x_in, y_in, z_in;
 logic [31:0] x, y;
   
-  rasterizer #(.COORD_WIDTH(32)) rasterize (
+  rasterizer #(.COORD_WIDTH(32), .DEPTH_BIT_WIDTH(16)) rasterize (
     .clk_in(clk_in),
     .rst_in(rst_in),
     .start(start_render),
-    .x_in(32'h00000000),
+    .x_in(x_in),
     .y_in(y_in),
     .z_in(z_in),
     .x(x),
@@ -36,8 +36,9 @@ logic [31:0] x, y;
     clk_in = 0;
     rst_in = 0;
     start_render = 0;
-    y_in = 32'hFFFC0000;
-    z_in = 32'hFFFC0000;
+    x_in = 32'hFFFF0628;
+    y_in = 32'hFFFFF156;
+    z_in = 32'hFFFEC464;
     #5;
     rst_in = 1;
     #10;
@@ -46,7 +47,7 @@ logic [31:0] x, y;
     start_render = 1;
     #10;
     start_render = 0;
-    #300000;
+    #500000;
     $display("Simulation finished");
     $finish;
   end
