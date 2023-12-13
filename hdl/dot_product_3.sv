@@ -24,8 +24,8 @@ always_ff @(posedge clk_in) begin
 
     // Step 2
     if (FIXED_POINT) begin
-        sum_01 <= (xy0 + xy1) >>> WIDTH/2;
-        sum_23 <= (xy2) >>> WIDTH/2;
+        sum_01 <= (xy0 >>> WIDTH/2) + (xy1 >>> WIDTH/2);
+        sum_23 <= (xy2 >>> WIDTH/2);
     end
     else begin
         sum_01 <= xy0 + xy1;

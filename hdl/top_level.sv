@@ -315,14 +315,23 @@ module top_level(
       end
     end
     if (sys_rst) begin
+      x_input <= 32'h00000000;
+      y_input <= 32'h00010000;
+      z_input <= 32'hFFFA0000;
+    end else if (btn[1]) begin
       x_input <= 32'h00000005;
       y_input <= 32'h00000005;
       z_input <= 32'h00000005;
+    end else if (btn[2]) begin
+      x_input = 32'hFFFF0628;
+      y_input = 32'hFFFFF156;
+      z_input = 32'hFFFEC464;
     end
   end
 
   logic [2:0] raster_state;
   logic [31:0] raster_test;
+  logic signed [31:0] u, v, w;
   logic [1:0] proj_status;
 
   // Rasterizer debugging
@@ -330,7 +339,21 @@ module top_level(
     //val_to_display[2:0] <= state_status;
     //val_to_display[5:4] <= proj_status;
     //val_to_display[10:8] <= raster_state;
-    val_to_display <= raster_test;
+    if (sw[14]) begin
+      val_to_display <= y_input;
+    end else if (sw[13]) begin
+      val_to_display <= z_input;
+    end else if (sw[12]) begin
+      val_to_display <= raster_test;
+    end else if (sw[11]) begin
+      val_to_display <= u;
+    end else if (sw[10]) begin
+      val_to_display <= v;
+    end else if (sw[9]) begin
+      val_to_display <= w;
+    end else if (sw[15]) begin
+      val_to_display <= x_input;
+    end
   end
 
   // Rendering
@@ -344,6 +367,9 @@ module top_level(
     .z_in(z_input),
     .x(x),
     .y(y),
+    .out_u(u),
+    .out_v(v),
+    .out_w(w),
     .depth(raster_depth),
     .raster_state(raster_state),
     .drawing(drawing),

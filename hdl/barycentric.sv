@@ -3,87 +3,112 @@
 
 // Based on this stage exchange: https://gamedev.stackexchange.com/questions/23743/whats-the-most-efficient-way-to-find-barycentric-coordinates
 // Use init and fill in a, b, and c first to initialize the module with precomputed values
-// Then set p to start computing, results available on the 8th cycle after p is set
+// Then set p to start computing, results available on the 13th cycle after p is set
+// May have precision errors near the vertices and edges, resulting in uvw values that are outside
+// of the 0-1 range. This will result in extrapolation of vertex attributes, which should have 
+// negligble error to its real value
 module computeBarycentric #(parameter COORD_WIDTH = 32) (
     input wire clk_in,
     input wire rst_in,
-    input wire signed [2:0][COORD_WIDTH/2-1:0] p, a, b, c, //Point p and triangle vertices a, b, c
+    input wire signed [2:0][COORD_WIDTH/2-1:0] p, a, b, c, //Point p and triangle vertices a, b, c, integers
     input wire valid_in,
     input wire init, // Initialize module with precalculated values
 
     output logic [COORD_WIDTH-1:0] u, v, w,
-    output logic valid,
+    output logic valid_out,
     output logic init_done,
-    output logic busy,
+    output logic init_failed,
     output logic done
 );
-localparam FP_HIGH = COORD_WIDTH*2 - COORD_WIDTH/2 - 1;
-localparam FP_LOW = COORD_WIDTH/2;
-localparam ONE = 1 <<< COORD_WIDTH/2;
-localparam DELAY = 8;
+localparam DIV_HIGH = (COORD_WIDTH/2 + COORD_WIDTH) - COORD_WIDTH/4 - 1;
+localparam DIV_LOW = COORD_WIDTH/4;
+localparam DELAY = 7+5;
+logic [DELAY-1:0] valid_in_pipe;
+logic signed [COORD_WIDTH-1:0] out_u, out_v, out_w;
 
 logic signed [COORD_WIDTH/2-1:0] dp0_x0, dp0_x1, dp0_x2, dp0_y0, dp0_y1, dp0_y2, dp0_out;
 logic signed [COORD_WIDTH/2-1:0] dp1_x0, dp1_x1, dp1_x2, dp1_y0, dp1_y1, dp1_y2, dp1_out;
+logic signed [COORD_WIDTH/2-1:0] d00, d01, d11, d20, d21;
+logic signed [COORD_WIDTH-1:0] d00_11, d01_01;
 logic signed [2:0][COORD_WIDTH/2-1:0] v0, v1, v2;
-logic signed [COORD_WIDTH/2-1:0] d00, d01, d11;
+logic signed [(COORD_WIDTH/2 + COORD_WIDTH)-1:0] d00_div, d01_div, d11_div; // Multiplying Q32.0 with Q0.32, giving Q64.32
 
 logic div0_start, div0_busy, div0_done, div0_valid;
-logic signed [COORD_WIDTH-1:0] div0_dividend, div0_divider, div0_out;
+logic signed [COORD_WIDTH-1:0] div0_dividend, div0_divider, div0_out; //Q32.32, div0_out will always be <1 so only use last 
 
-logic [DELAY-1:0] valid_in_pipe;
-
-(* dont_touch = "yes" *) logic signed [COORD_WIDTH-1:0] prod_a, prod_b, prod_c, prod_d, invDenom;
-(* dont_touch = "yes" *) logic signed [2*COORD_WIDTH-1:0] w_prod, v_prod;
+logic signed [(COORD_WIDTH/2 + COORD_WIDTH)-1:0] prod_a, prod_b, prod_c, prod_d; //Q48.48
+logic signed [(COORD_WIDTH/2 + COORD_WIDTH)-1:0] prod_test;
 
 enum {IDLE, INIT_D11, AWAIT_INIT, AWAIT_INIT_2, D00_D01_DONE, D11_DONE, START_DIV, AWAIT_DIVIDER, INIT_DONE} state;
 
 always_ff @(posedge clk_in) begin
     if (rst_in) begin
-        busy <= 0;
+        init_failed <= 0;
         done <= 0;
         init_done <= 0;
-        valid <= 0;
+        valid_out <= 0;
         u <= 0;
         v <= 0;
         w <= 0;
         state <= IDLE;
-        prod_a <= 0;
-        prod_b <= 0;
-        prod_c <= 0;
-        prod_d <= 0;
+        d00 <= 0;
+        d01 <= 0;
+        d11 <= 0;
+        d20 <= 0;
+        d21 <= 0;
+        dp0_x0 <= 0;
+        dp0_x1 <= 0;
+        dp0_x2 <= 0;
+        dp0_y0 <= 0;
+        dp0_y1 <= 0;
+        dp0_y2 <= 0;
+        dp1_x0 <= 0;
+        dp1_x1 <= 0;
+        dp1_x2 <= 0;
+        dp1_y0 <= 0;
+        dp1_y1 <= 0;
+        dp1_y2 <= 0;
         v0 <= 0;
         v1 <= 0;
         v2 <= 0;
+        out_u <= 0;
+        out_v <= 0;
+        out_w <= 0;
+        d00_div <= 0;
+        d01_div <= 0;
+        d11_div <= 0;
+        valid_in_pipe <= 0;
+        valid_out <= 0;
+
     end
     else begin
         case (state)
             IDLE: begin
                 if (init) begin
                     state <= INIT_D11;
-                    busy <= 1;
-                    v0 <= {b[2] - a[2], b[1] - a[1], b[0] - a[0]};
-                    v1 <= {c[2] - a[2], c[1] - a[1], c[0] - a[0]};
+                    v0 <= {$signed(b[2]) - $signed(a[2]), $signed(b[1]) - $signed(a[1]), $signed(b[0]) - $signed(a[0])};
+                    v1 <= {$signed(c[2]) - $signed(a[2]), $signed(c[1]) - $signed(a[1]), $signed(c[0]) - $signed(a[0])};
 
                     // Init calculating d00
-                    dp0_x0 <= b[0] - a[0];
-                    dp0_x1 <= b[1] - a[1];
-                    dp0_x2 <= b[2] - a[2];
-                    dp0_y0 <= b[0] - a[0];
-                    dp0_y1 <= b[1] - a[1];
-                    dp0_y2 <= b[2] - a[2];
+                    dp0_x0 <= $signed(b[0]) - $signed(a[0]);
+                    dp0_x1 <= $signed(b[1]) - $signed(a[1]);
+                    dp0_x2 <= $signed(b[2]) - $signed(a[2]);
+                    dp0_y0 <= $signed(b[0]) - $signed(a[0]);
+                    dp0_y1 <= $signed(b[1]) - $signed(a[1]);
+                    dp0_y2 <= $signed(b[2]) - $signed(a[2]);
 
                     // Init calculating d01
-                    dp1_x0 <= b[0] - a[0];
-                    dp1_x1 <= b[1] - a[1];
-                    dp1_x2 <= b[2] - a[2];
-                    dp1_y0 <= c[0] - a[0];
-                    dp1_y1 <= c[1] - a[1];
-                    dp1_y2 <= c[2] - a[2];
+                    dp1_x0 <= $signed(b[0]) - $signed(a[0]);
+                    dp1_x1 <= $signed(b[1]) - $signed(a[1]);
+                    dp1_x2 <= $signed(b[2]) - $signed(a[2]);
+                    dp1_y0 <= $signed(c[0]) - $signed(a[0]);
+                    dp1_y1 <= $signed(c[1]) - $signed(a[1]);
+                    dp1_y2 <= $signed(c[2]) - $signed(a[2]);
                 end else begin
                     state <= IDLE;
-                    busy <= 0;
                 end
                 init_done <= 0;
+                init_failed <= 0;
             end
             INIT_D11: begin
                 // Init calculating d11
@@ -108,15 +133,14 @@ always_ff @(posedge clk_in) begin
             end
             D11_DONE: begin
                 d11 <= dp0_out;
-                // Compute divider for invDenom
-                prod_a <= d00 * dp0_out;
-                prod_b <= d01 * d01;
+                d00_11 <= d00*dp0_out;
+                d01_01 <= d01*d01;
                 state <= START_DIV;
             end
             START_DIV: begin
                 div0_start <= 1;
-                div0_dividend <= ONE;
-                div0_divider <= prod_a - prod_b;
+                div0_dividend <= (COORD_WIDTH'('b1) <<< COORD_WIDTH/2);
+                div0_divider <= (d00_11 - d01_01) <<< COORD_WIDTH/2;
                 state <= AWAIT_DIVIDER;
             end
             AWAIT_DIVIDER: begin
@@ -124,15 +148,26 @@ always_ff @(posedge clk_in) begin
                 if (div0_done) begin
                     if (div0_valid) begin
                         state <= INIT_DONE;
-                        invDenom <= div0_out;
+                        d00_div <= d00 * div0_out;
+                        d01_div <= d01 * div0_out;
+                        d11_div <= d11 * div0_out;
+                        
+                        // Prefill some values for the dot products ahead of time
+                        dp0_y0 <= v0[0];
+                        dp0_y1 <= v0[1];
+                        dp0_y2 <= v0[2];
+                        dp1_y0 <= v1[0];
+                        dp1_y1 <= v1[1];
+                        dp1_y2 <= v1[2];
                         init_done <= 1;
                     end
                     else begin
                         // Division error
                         state <= IDLE;
-                        valid <= 0;
+                        valid_out <= 0;
                         done <= 1;
                         init_done <= 0;
+                        init_failed <= 1;
                     end
                 end else begin
                     state <= AWAIT_DIVIDER;
@@ -143,44 +178,66 @@ always_ff @(posedge clk_in) begin
                 valid_in_pipe <= {valid_in, valid_in_pipe[DELAY-1:1]};
 
                 // Step 1
-                v2 <= {p[2] - a[2], p[1] - a[1], p[0] - a[0]};
+                v2 <= {$signed(p[2]) - $signed(a[2]), $signed(p[1]) - $signed(a[1]), $signed(p[0]) - $signed(a[0])};
 
                 // Step 2
                 dp0_x0 <= v2[0];
                 dp0_x1 <= v2[1];
                 dp0_x2 <= v2[2];
-                dp0_y0 <= v0[0];
-                dp0_y1 <= v0[1];
-                dp0_y2 <= v0[2];
 
                 dp1_x0 <= v2[0];
                 dp1_x1 <= v2[1];
                 dp1_x2 <= v2[2];
-                dp1_y0 <= v1[0];
-                dp1_y1 <= v1[1];
-                dp1_y2 <= v1[2];
 
                 // Step 3 (3 cycles later, on 4th cycle after step 2, 6th overall)
-                prod_a <= dp0_out * d11;
-                prod_b <= dp1_out * d01;
-                prod_c <= dp1_out * d00;
-                prod_d <= dp0_out * d01;
+                d20 <= dp0_out;
+                d21 <= dp1_out;
 
-                // Step 4
-                v_prod <= (prod_a - prod_b) * invDenom;
-                w_prod <= (prod_c - prod_d) * invDenom;
+                // Step 4 (6th cycle after dp20 and dp21 are set)
+                out_v <= (prod_a - prod_b); //Q64.32 to 32.32
+                out_w <= (prod_c - prod_d);
+                out_u <= (((prod_a - prod_b)) + ((prod_c - prod_d)));
 
                 // Step 5
-                u <= $signed(ONE) - ($signed(v_prod[FP_HIGH:FP_LOW]) + $signed(w_prod[FP_HIGH:FP_LOW]));
-                v <= v_prod[FP_HIGH:FP_LOW];
-                w <= w_prod[FP_HIGH:FP_LOW];
-                valid <= valid_in_pipe[0] && v_prod[FP_HIGH] != 1 && w_prod[FP_HIGH] != 1 && (v_prod[FP_HIGH] + w_prod[FP_HIGH] < $signed(ONE));
+                // valid_out <= valid_in_pipe[0] && out_v[COORD_WIDTH-1] != 1 && out_w[COORD_WIDTH-1] != 1 && out_u[COORD_WIDTH-1] != 1;
+                valid_out <= valid_in_pipe[0];
+                u <= (COORD_WIDTH'('b1) <<< COORD_WIDTH/2) - out_u;
+                v <= out_v;
+                w <= out_w;
             end
         endcase
     end
 end
 
-dotProduct_3 #(.FIXED_POINT(1), .WIDTH(COORD_WIDTH/2)) dotProduct0 (
+mult1Q3232Q6464 mult1Q3232Q6464_0 (
+    .CLK(clk_in),
+    .A(d20), //Q32.0
+    .B($signed(d11_div[63:0])), //Q64.32 to Q32.32
+    .P(prod_a) //Q64.32
+);
+
+mult1Q3232Q6464 mult1Q3232Q6464_1 (
+    .CLK(clk_in),
+    .A(d21),
+    .B($signed(d01_div[63:0])),
+    .P(prod_b)
+);
+
+mult1Q3232Q6464 mult1Q3232Q6464_2 (
+    .CLK(clk_in),
+    .A(d21),
+    .B($signed(d00_div[63:0])),
+    .P(prod_c)
+);
+
+mult1Q3232Q6464 mult1Q3232Q6464_3 (
+    .CLK(clk_in),
+    .A(d20),
+    .B($signed(d01_div[63:0])),
+    .P(prod_d)
+);
+
+dotProduct_3 #(.FIXED_POINT(0), .WIDTH(COORD_WIDTH/2)) dotProduct0 (
     .clk_in(clk_in),
     .x0(dp0_x0),
     .x1(dp0_x1),
@@ -191,7 +248,7 @@ dotProduct_3 #(.FIXED_POINT(1), .WIDTH(COORD_WIDTH/2)) dotProduct0 (
     .out(dp0_out)
 );
 
-dotProduct_3 #(.FIXED_POINT(1), .WIDTH(COORD_WIDTH/2)) dotProduct1 (
+dotProduct_3 #(.FIXED_POINT(0), .WIDTH(COORD_WIDTH/2)) dotProduct1 (
     .clk_in(clk_in),
     .x0(dp1_x0),
     .x1(dp1_x1),
@@ -212,7 +269,7 @@ div #(.WIDTH(COORD_WIDTH), .FBITS(COORD_WIDTH/2)) divider0(
     .dbz(),
     .ovf(),
     .a(div0_dividend),
-    .b(div0_divider),
+    .b($signed(div0_divider)),
     .val(div0_out)
 );
 

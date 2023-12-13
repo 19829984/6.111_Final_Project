@@ -12,6 +12,8 @@
 !.gitignore
 ###########################################################################
 .Xil/
+ip_tb/
+ip/mult1Q3232Q6464/ip
 ##	VIVADO
 #Source files:
 #Do NOT ignore VHDL, Verilog, block diagrams or EDIF files.
