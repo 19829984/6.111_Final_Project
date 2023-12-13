@@ -8,6 +8,7 @@ module rasterizer #(parameter WIREFRAME = 0, parameter COORD_WIDTH = 32, paramet
     input wire signed [COORD_WIDTH-1:0] x_in,
     input wire signed [COORD_WIDTH-1:0] y_in,
     input wire signed [COORD_WIDTH-1:0] z_in,
+    input wire signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix,
 
     output logic [COORD_WIDTH-1:0] x, y,
     output logic signed [COORD_WIDTH-1:0] out_u, out_v, out_w,
@@ -29,7 +30,7 @@ localparam DEPTH64_LOW = (COORD_WIDTH) - (DEPTH_BIT_WIDTH/2);
 logic signed [2:0][2:0][COORD_WIDTH-1:0] triangle_coords;
 logic signed [2:0][3:0][COORD_WIDTH-1:0] projected_coords;
 logic signed [3:0][3:0][COORD_WIDTH-1:0] model_matrix;
-logic signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix;
+//logic signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix;
 logic signed [3:0][3:0][COORD_WIDTH-1:0] projection_matrix;
 
 logic signed [3:0][COORD_WIDTH-1:0] screen_vert_1, screen_vert_2, screen_vert_3;
@@ -87,22 +88,23 @@ always_comb begin
     projection_matrix[3][2] = 32'hffff0000; // -1, same as opengl's
     projection_matrix[3][3] = 32'b0;
 
-    view_matrix[0][0] = 32'h00010000; // 1 in Q16.16
-    view_matrix[0][1] = 0;
-    view_matrix[0][2] = 0;
-    view_matrix[0][3] = x_in;
-    view_matrix[1][0] = 0;
-    view_matrix[1][1] = 32'h00010000;
-    view_matrix[1][2] = 0;
-    view_matrix[1][3] = y_in;
-    view_matrix[2][0] = 0;
-    view_matrix[2][1] = 0; 
-    view_matrix[2][2] = 32'h00010000;
-    view_matrix[2][3] = z_in; //-6
-    view_matrix[3][0] = 0; 
-    view_matrix[3][1] = 0;
-    view_matrix[3][2] = 0; 
-    view_matrix[3][3] = 32'h00010000;
+    // view_matrix[0][0] = 32'h00010000; // 1 in Q16.16
+    // view_matrix[0][1] = 0;
+    // view_matrix[0][2] = 0;
+    // view_matrix[0][3] = x_in;
+    // view_matrix[1][0] = 0;
+    // view_matrix[1][1] = 32'h00010000;
+    // view_matrix[1][2] = 0;
+    // view_matrix[1][3] = y_in;
+    // view_matrix[2][0] = 0;
+    // view_matrix[2][1] = 0; 
+    // view_matrix[2][2] = 32'h00010000;
+    // view_matrix[2][3] = z_in; //-6
+    // view_matrix[3][0] = 0; 
+    // view_matrix[3][1] = 0;
+    // view_matrix[3][2] = 0; 
+    // view_matrix[3][3] = 32'h00010000;
+    // [1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1];
 
     model_matrix[0][0] = 32'h00010000; // 1 in Q16.16
     model_matrix[0][1] = 0;

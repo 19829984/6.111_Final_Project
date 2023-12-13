@@ -12,7 +12,7 @@ module dotProduct #(parameter FIXED_POINT = 0, parameter WIDTH = 32) (
     output logic signed [WIDTH-1:0] out
 );
 localparam FP_HIGH = WIDTH*2 - WIDTH/2 - 1;
-localparam FP_LOW = WIDTH/2;;
+localparam FP_LOW = WIDTH/2;
 logic signed [2*WIDTH-1:0] xy0, xy1, xy2, xy3;
 logic signed [WIDTH-1:0] sum, sum_01, sum_23;
 

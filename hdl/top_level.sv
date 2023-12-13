@@ -220,6 +220,26 @@ module top_level(
   );
 
 
+  // WORLD LOGIC
+  logic signed [COORD_WIDTH-1:0] rot_angle;
+  logic signed [COORD_WIDTH-1:0] side_angle;
+  logic signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix;
+  logic start_view_matrix;
+  logic view_done;
+  view_matrix_calculator #(.COORD_WIDTH(COORD_WIDTH)) view_matrix_calc (
+    .clk_in(clk_pixel),
+    .rst_in(sys_rst),
+    .start(start_view_matrix),
+    .x_in(x_input),
+    .y_in(y_input),
+    .z_in(z_input),
+    .rot_angle(rot_angle),
+    .side_angle(side_angle),
+    .done(view_done),
+    .view_matrix(view_matrix)
+  );
+
+
   enum {IDLE, INIT, CLEARING, DRAW, DONE} fb_state;
   logic start_render;
   logic render_done;
@@ -256,18 +276,21 @@ module top_level(
           depth_write_addr <= depth_write_addr + 1;
           if (fb_clear_addr == FB_NUM_PIXELS - 1) begin
             fb_state <= DRAW;
-            start_render <= 1;
+            start_view_matrix <= 1;
           end
           state_status <= 2;
         end
         DRAW: begin
+          start_render <= view_done;
           if (render_done) begin
             fb_state <= DONE;
           end
-          start_render <= 0;
+
+          start_view_matrix <= 0;
           state_status <= 3;
         end
         DONE: begin
+          start_render <= 0;
           fb_state <= IDLE;
           state_status <= 4;
         end
@@ -313,6 +336,18 @@ module top_level(
       if (sw[8]) begin
         z_input <= z_input - 32'h0000019a;
       end
+      if (sw[9]) begin
+        rot_angle <= rot_angle + 32'h0100_0000;
+      end
+      if (sw[10]) begin
+        rot_angle <= rot_angle - 32'h0100_0000;
+      end
+      if (sw[11]) begin
+        side_angle <= side_angle + 32'h0100_0000;
+      end
+      if (sw[12]) begin
+        side_angle <= side_angle - 32'h0100_0000;
+      end
     end
     if (sys_rst) begin
       x_input <= 32'h00000000;
@@ -326,6 +361,8 @@ module top_level(
       x_input = 32'hFFFF0628;
       y_input = 32'hFFFFF156;
       z_input = 32'hFFFEC464;
+      rot_angle <= 0;
+      side_angle <= 0;
     end
   end
 
@@ -343,17 +380,12 @@ module top_level(
       val_to_display <= y_input;
     end else if (sw[13]) begin
       val_to_display <= z_input;
-    end else if (sw[12]) begin
-      val_to_display <= raster_test;
-    end else if (sw[11]) begin
-      val_to_display <= u;
-    end else if (sw[10]) begin
-      val_to_display <= v;
-    end else if (sw[9]) begin
-      val_to_display <= w;
     end else if (sw[15]) begin
       val_to_display <= x_input;
     end
+    //val_to_display <= {view_matrix[1][3], view_matrix[2][3]};
+    //val_to_display <= {view_matrix[1][3][31:24], view_matrix[2][3][31:24], view_matrix[0][0][31:16]};
+    val_to_display <= {view_matrix[2][3][31:16], view_matrix[0][0][31:16]};
   end
 
   // Rendering
@@ -365,6 +397,7 @@ module top_level(
     .x_in(x_input),
     .y_in(y_input),
     .z_in(z_input),
+    .view_matrix(view_matrix),
     .x(x),
     .y(y),
     .out_u(u),
