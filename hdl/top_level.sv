@@ -241,12 +241,12 @@ module top_level(
 
   logic signed [1:0][5:0] world_populator;
   always_ff @(posedge clk_pixel) begin
-    if (new_frame) begin
-        if (world_populator[0] < 63) begin // draw 16 cubes
-            world_populator[0] = world_populator[0] + 1;
-            world_populator[1] = world_populator[1] + 1;
-        end
-    end
+    // if (new_frame) begin
+    //     if (world_populator[0] < 63) begin // draw 16 cubes
+    //         world_populator[0] = world_populator[0] + 1;
+    //         world_populator[1] = world_populator[1] + 1;
+    //     end
+    // end
   end
 
   xilinx_true_dual_port_read_first_2_clock_ram #(
@@ -420,7 +420,9 @@ module top_level(
     //val_to_display[2:0] <= state_status;
     //val_to_display[5:4] <= proj_status;
     //val_to_display[10:8] <= raster_state;
-    if (sw[14]) begin
+    if (sw[14] && sw[15]) begin
+      val_to_display <= raster_test;
+    end else if (sw[14]) begin
       val_to_display <= y_input;
     end else if (sw[13]) begin
       val_to_display <= z_input;

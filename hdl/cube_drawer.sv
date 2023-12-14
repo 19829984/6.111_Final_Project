@@ -22,6 +22,7 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
     logic drawer_start;
     logic drawer_busy;
     logic drawer_done;
+    logic raster_reset;
     logic signed [COORD_WIDTH-1:0] x_cor;
     logic signed [COORD_WIDTH-1:0] y_cor;
     logic signed [COORD_WIDTH-1:0] z_cor;
@@ -36,7 +37,7 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
         .FB_HEIGHT(FB_HEIGHT)
     ) drawer (
         .clk_in(clk_in),
-        .rst_in(rst_in),
+        .rst_in(raster_reset),
         .start(drawer_start),
         .triangle_coords(triangle_coords),
         .view_matrix(view_matrix),
@@ -59,6 +60,7 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
             done <= 0;
             state <= IDLE;
             color <= 8'hFF;
+            raster_reset <= 1;
         end else begin
             case (state)
                 IDLE: begin
@@ -74,6 +76,7 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
                     done <= 0;
                 end
                 INIT_TRI: begin
+                    raster_reset <= 0;
                     case (tri_index) 
                         4'b0000: begin
                             triangle_coords[0][0] <= x_cor;
@@ -244,6 +247,7 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
                         if (tri_index < 4'b1011) begin
                             tri_index <= tri_index + 1;
                             state <= INIT_TRI;
+                            raster_reset <= 1;
                         end else begin
                             state <= DONE;
                             done <= 1;
