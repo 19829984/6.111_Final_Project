@@ -358,15 +358,13 @@ module top_level(
           state_status <= 3;
         end
         UPDATE: begin
-            //if (update_busy) begin
-            //    start_update <= 0;
-            //end
-            //if (update_done) begin
-            //    fb_state <= DONE;
-            //end
-            start_update <= 0;
+            if (update_busy) begin
+                start_update <= 0;
+            end
+            if (update_done) begin
+                fb_state <= DONE;
+            end
             state_status <= 4;
-            fb_state <= DONE;
         end
         DONE: begin
           start_render <= 0;
@@ -502,9 +500,9 @@ module top_level(
       // red = converted_r;
       // green = converted_g;
       // blue = converted_b;
-      red = btn[3] ? depth_read : fb_read;
-      green = btn[3] ? depth_read : fb_read;
-      blue = btn[3] ? depth_read : fb_read;
+      red = fb_read;
+      green = fb_read;
+      blue = fb_read;
     end
   end
  
