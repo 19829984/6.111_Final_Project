@@ -376,16 +376,19 @@ module top_level(
     //val_to_display[2:0] <= state_status;
     //val_to_display[5:4] <= proj_status;
     //val_to_display[10:8] <= raster_state;
-    if (sw[14]) begin
+    if (sw[14] && sw[15]) begin
+      val_to_display <= raster_test;
+    end else if (sw[14]) begin
       val_to_display <= y_input;
     end else if (sw[13]) begin
       val_to_display <= z_input;
     end else if (sw[15]) begin
       val_to_display <= x_input;
+    end else begin
+      val_to_display <= {view_matrix[2][3][31:16], view_matrix[0][0][31:16]};
     end
     //val_to_display <= {view_matrix[1][3], view_matrix[2][3]};
     //val_to_display <= {view_matrix[1][3][31:24], view_matrix[2][3][31:24], view_matrix[0][0][31:16]};
-    val_to_display <= {view_matrix[2][3][31:16], view_matrix[0][0][31:16]};
   end
 
   // Rendering

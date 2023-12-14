@@ -22,6 +22,7 @@ localparam FP_LOW = COORD_WIDTH/2;
 localparam FB_HEIGHT_HALF = FB_HEIGHT / 2;
 localparam FB_WIDTH_HALF = FB_WIDTH / 2;
 localparam FAR_MINUS_NEAR_HALF = (32'h00640000 - 32'h0000199a) / 2; // 100 - 0.1 in Q16.16
+localparam FAR_MINUS_NEAR = (32'h00640000 - 32'h0000199a); // 100 - 0.1 in Q16.16
 localparam FAR_PLUS_NEAR_HALF = (32'h00640000 + 32'h0000199a) / 2; // 100 + 0.1 in Q16.16
 
 // Register input vertices and matrices
@@ -182,13 +183,13 @@ always_ff @(posedge clk_in) begin
             VIEWPORT1: begin
                 viewport_x_int <= $signed(prod_x >> COORD_WIDTH/2) + $signed(ONE);
                 viewport_y_int <= $signed(ONE) - $signed(prod_y >> COORD_WIDTH/2);
-                viewport_z_int <= ($signed(FAR_MINUS_NEAR_HALF)) * $signed(prod_z >> COORD_WIDTH/2);
+                viewport_z_int <= ($signed(FAR_MINUS_NEAR)) * $signed(prod_z >> COORD_WIDTH/2);
                 state <= VIEWPORT2;
             end
             VIEWPORT2: begin
                 viewport_x <= ($signed(FB_WIDTH_HALF) <<< COORD_WIDTH/2) * viewport_x_int;
                 viewport_y <= ($signed(FB_HEIGHT_HALF) <<< COORD_WIDTH/2) * viewport_y_int;
-                viewport_z <= viewport_z_int + ($signed(FAR_PLUS_NEAR_HALF) <<< COORD_WIDTH/2);
+                viewport_z <= viewport_z_int + 64'h00000000199a0000;
                 current_vert <= triangle_verts_reg[vert_index];
                 state <= INIT;
             end
