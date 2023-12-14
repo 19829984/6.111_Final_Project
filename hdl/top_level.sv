@@ -104,6 +104,7 @@ module top_level(
   logic [FB_ADDR_WIDTH-1:0] depth_write_addr;
   logic [FB_ADDR_WIDTH-1:0] depth_read_addr;
   logic dp_we, dp_re;
+  assign depth_write_addr = fb_write_addr;
 
   logic [DEPTH_BIT_WIDTH-1:0] raster_depth;
   logic [DEPTH_BIT_WIDTH-1:0] clearing_depth;
@@ -310,7 +311,7 @@ module top_level(
           fb_clear_color <= 8'h00;
           state_status <= 1;
 
-          depth_write_addr <= 0;
+          // depth_write_addr <= 0;
           clearing_depth <= 16'hFFFF;
           // clearing_depth <= 16'h0000 + test_incr;
           // test_incr <= 0;//test_incr + 1;
@@ -320,7 +321,7 @@ module top_level(
           fb_clear_addr <= fb_clear_addr + 1;
           // clearing_depth <= 16'h0000 + test_incr;
           // test_incr <= test_incr + 1;
-          depth_write_addr <= depth_write_addr + 1;
+          // depth_write_addr <= depth_write_addr + 1;
           if (fb_clear_addr == FB_NUM_PIXELS - 1) begin
             fb_state <= DRAW;
             start_view_matrix <= 1;
@@ -421,7 +422,7 @@ module top_level(
     //val_to_display[5:4] <= proj_status;
     //val_to_display[10:8] <= raster_state;
     if (sw[14] && sw[15]) begin
-      val_to_display <= raster_test;
+      val_to_display <= raster_depth;
     end else if (sw[14]) begin
       val_to_display <= y_input;
     end else if (sw[13]) begin
@@ -429,7 +430,9 @@ module top_level(
     end else if (sw[15]) begin
       val_to_display <= x_input;
     end else begin
-      val_to_display <= {sw[15], world_debug, x_corner[23:16], z_corner[31:16]};
+      if (depth_read != 16'hFFFF) begin
+        val_to_display <= depth_read;
+      end
     end
     //val_to_display <= {view_matrix[1][3], view_matrix[2][3]};
     //val_to_display <= {view_matrix[1][3][31:24], view_matrix[2][3][31:24], view_matrix[0][0][31:16]};
@@ -490,9 +493,9 @@ module top_level(
       // red = converted_r;
       // green = converted_g;
       // blue = converted_b;
-      red = fb_read;
-      green = fb_read;
-      blue = fb_read;
+      red = btn[3] ? depth_read : fb_read;
+      green = btn[3] ? depth_read : fb_read;
+      blue = btn[3] ? depth_read : fb_read;
     end
   end
  

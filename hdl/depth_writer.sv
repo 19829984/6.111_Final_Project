@@ -98,6 +98,7 @@ module depth_writer #(parameter FB_BIT_WIDTH = 16, parameter DEPTH_BIT_WIDTH = 1
                     dp_we_out <= 0;
                     dp_write_out <= dp_write_mid_3;
                     dp_value_out <= dp_read_in;
+                    fb_value_out <= dp_read_in;
                 end else begin // do write
                     fb_we_out <= fb_we_mid_3;
                     dp_we_out <= dp_we_mid_3;
