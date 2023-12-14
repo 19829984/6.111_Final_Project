@@ -33,7 +33,7 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
     logic valid_cube;
     assign valid_cube = world_read[3*COORD_WIDTH/2];
 
-    assign color = {1'b1, current_cube[3:0], 3'b1};
+    //assign color = {1'b1, current_cube[3:0], 3'b1};
     cube_drawer #(.COORD_WIDTH(COORD_WIDTH), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT), .FB_BIT_WIDTH(FB_BIT_WIDTH))  (
         .clk_in(clk_in),
         .rst_in(rst_in),
@@ -45,7 +45,7 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
         .x(x),
         .y(y),
         .depth(depth),
-        .color(),
+        .color(color),
         .drawing(drawing),
         .busy(cube_busy),
         .done(cube_done)
