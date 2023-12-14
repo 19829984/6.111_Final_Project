@@ -49,6 +49,7 @@ logic signed [COORD_WIDTH-1:0] viewport_x_int, viewport_y_int;
 
 logic signed [2*COORD_WIDTH-1:0] prod_x, prod_y, prod_z, viewport_x, viewport_y, viewport_z, viewport_z_int; //Q32.32
 logic signed [2:0][3:0][COORD_WIDTH-1:0] out_tri;
+logic [1:0] num_vert_out_of_bound;
 assign projected_verts = out_tri;
 
 enum {IDLE, INIT, MODEL_MATRIX, VIEW_MATRIX, PROJ_MATRIX, CLIP, NDC, VIEWPORT1, VIEWPORT2, DONE} state;
@@ -61,6 +62,7 @@ always_ff @(posedge clk_in) begin
         vert_index <= 0;
         valid <= 0;
         out_tri <= 0;
+        num_vert_out_of_bound <= 0;
     end else begin
         case (state)
             IDLE: begin
@@ -99,6 +101,7 @@ always_ff @(posedge clk_in) begin
                 if (vert_index > 0) begin
                     out_tri[vert_index - 1] <= {inv_w, viewport_z[FP_HIGH:FP_LOW], viewport_y[FP_HIGH:FP_LOW], viewport_x[FP_HIGH:FP_LOW]};
                 end
+                num_vert_out_of_bound <= 0;
             end
             MODEL_MATRIX: begin
                 if (!vector_matrix_done) begin
@@ -141,11 +144,21 @@ always_ff @(posedge clk_in) begin
             CLIP: begin
                 if (abs_z > w) begin
                     // Discard triangles that are outside of the view frustum
-                    // TODO: Create new triangles from frustum clipping
                     state <= DONE;
                     valid <= 0;
                     done <= 1;
                     status <= 2'b01;
+                end else if (abs_y > (w <<< 2) || abs_x > (w <<< 2)) begin
+                    // Discard triangles that are outside of the view frustum
+                    // TODO: Do xy culling with increased w.
+                    if (num_vert_out_of_bound == 2) begin // All verts out of frustum
+                        state <= DONE;
+                        valid <= 0;
+                        done <= 1;
+                        status <= 2'b01;
+                    end else begin
+                        num_vert_out_of_bound = num_vert_out_of_bound + 1;
+                    end
                 end else begin
                 state <= NDC;
 
