@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps 
 `default_nettype none
-module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, parameter DEPTH_BIT_WIDTH=16, parameter FB_WIDTH=320, parameter FB_HEIGHT=180, parameter FB_BIT_WIDTH=100, parameter WORLD_SIZE=100, parameter WORLD_BITS=7) (
+module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, parameter DEPTH_BIT_WIDTH=16, parameter FB_WIDTH=320, parameter FB_HEIGHT=180, parameter FB_BIT_WIDTH=100, parameter WORLD_SIZE=100, parameter WORLD_BITS=7, parameter NORMAL_WIDTH=2) (
     input wire clk_in,
     input wire rst_in,
     input wire start,
@@ -17,6 +17,8 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
     output logic [FB_BIT_WIDTH-1:0] color,
     output logic drawing,
     output logic busy,
+    output logic [WORLD_BITS-1:0] looked_at_cube,
+    output logic [2:0][NORMAL_WIDTH-1:0] looked_at_normal,
     output logic done
 );
     logic [WORLD_BITS-1:0] current_cube;
@@ -31,10 +33,17 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
     logic signed [COORD_WIDTH-1:0] y_corner;
     logic signed [COORD_WIDTH-1:0] z_corner;
     logic valid_cube;
+    
+    logic cube_at_center;
+    logic signed [2:0][NORMAL_WIDTH-1:0] center_face_normal;
+    logic signed [2:0][NORMAL_WIDTH-1:0] normal_at_center;
+    logic [DEPTH_BIT_WIDTH-1:0] closest_depth_at_center;
+    logic [WORLD_BITS-1:0] current_cube_at_center;
+
     assign valid_cube = world_read[3*COORD_WIDTH/2];
 
     assign color = {1'b1, current_cube[3:0], 3'b1};
-    cube_drawer #(.COORD_WIDTH(COORD_WIDTH), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT), .FB_BIT_WIDTH(FB_BIT_WIDTH))  (
+    cube_drawer #(.COORD_WIDTH(COORD_WIDTH), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT), .FB_BIT_WIDTH(FB_BIT_WIDTH), .NORMAL_WIDTH(2))  (
         .clk_in(clk_in),
         .rst_in(rst_in),
         .start(cube_start),
@@ -45,6 +54,8 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
         .x(x),
         .y(y),
         .depth(depth),
+        .cube_at_center(cube_at_center),
+        .center_face_normal(center_face_normal),
         .color(),
         .drawing(drawing),
         .busy(cube_busy),
@@ -90,6 +101,8 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
                         wait_until_draw <= 0;
                         current_cube <= 0;
                         state <= INIT_READ;
+                        closest_depth_at_center <= ~0; // Initialize to max depth
+                        looked_at_cube <= ~0;
                     end
                     done <= 0;
                end
@@ -108,6 +121,8 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
                             current_cube <= current_cube + 1;
                         end else begin
                             state <= DONE;
+                            looked_at_cube <= current_cube_at_center;
+                            looked_at_normal <= normal_at_center;
                             done <= 1;
                             busy <= 0;
                         end
@@ -118,6 +133,14 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
                DRAWING: begin
                     if (cube_busy) begin
                         cube_start <= 0;
+
+                        if (cube_at_center) begin
+                            if (depth < closest_depth_at_center) begin
+                                closest_depth_at_center <= depth;
+                                current_cube_at_center <= current_cube;
+                                normal_at_center <= center_face_normal;
+                            end
+                        end
                     end
                     if (cube_done && ~cube_start) begin
                         if (current_cube < WORLD_SIZE - 1) begin

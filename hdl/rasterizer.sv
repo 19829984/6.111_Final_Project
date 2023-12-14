@@ -1,11 +1,12 @@
 `timescale 1ns / 1ps
 `default_nettype none
 module rasterizer #(parameter WIREFRAME = 0, parameter COORD_WIDTH = 32, parameter DEPTH_BIT_WIDTH = 16,
-                    parameter FB_WIDTH = 320, parameter FB_HEIGHT = 180) (
+                    parameter NORMAL_WIDTH = 2, parameter FB_WIDTH = 320, parameter FB_HEIGHT = 180) (
     input wire clk_in,
     input wire rst_in,
     input wire start,
     input wire signed [2:0][2:0][COORD_WIDTH-1:0] triangle_coords,
+    input wire signed [2:0][2:0][NORMAL_WIDTH-1:0] tri_normals,
     input wire signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix,
 
     output logic [COORD_WIDTH-1:0] x, y,
