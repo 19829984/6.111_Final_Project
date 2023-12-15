@@ -11,7 +11,8 @@ module view_matrix_calculator #(parameter COORD_WIDTH=16) (
     input wire signed [COORD_WIDTH-1:0] side_angle,
 
     output logic done,
-    output logic signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix
+    output logic signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix,
+    output logic signed [2:0][COORD_WIDTH-1:0] forward_vec
 );
   enum {IDLE, TRIG, SET_MATRIX, ROT_SIDE, ROTSIDE_TRANS, DONE} state;
 
@@ -43,8 +44,7 @@ module view_matrix_calculator #(parameter COORD_WIDTH=16) (
       .angle(rot_angle[COORD_WIDTH-1:COORD_WIDTH-8]),
       .cos(cos_rot_small),
       .sin(sin_rot_small)
-  );
-  trig_lookup trig_lut_side (
+  ); trig_lookup trig_lut_side (
       .clk_in(clk_in),
       .angle(side_angle[COORD_WIDTH-1:COORD_WIDTH-8]),
       .cos(cos_side_small),
@@ -68,39 +68,10 @@ module view_matrix_calculator #(parameter COORD_WIDTH=16) (
         done <= 0;
         first_trig <= 0;
         mult_start <= 0;
+        forward_vec <= 0;
 
-        rot_matrix[0][0] <= 0; 
-        rot_matrix[0][1] <= 0;
-        rot_matrix[0][2] <= 0;
-        rot_matrix[0][3] <= 0;
-        rot_matrix[1][0] <= 0;
-        rot_matrix[1][1] <= 0;
-        rot_matrix[1][2] <= 0;
-        rot_matrix[1][3] <= 0;
-        rot_matrix[2][0] <= 0;
-        rot_matrix[2][1] <= 0; 
-        rot_matrix[2][2] <= 0;
-        rot_matrix[2][3] <= 0;
-        rot_matrix[3][0] <= 0; 
-        rot_matrix[3][1] <= 0;
-        rot_matrix[3][2] <= 0; 
-        rot_matrix[3][3] <= 0;
-        second_matrix[0][0] <= 0; 
-        second_matrix[0][1] <= 0;
-        second_matrix[0][2] <= 0;
-        second_matrix[0][3] <= 0;
-        second_matrix[1][0] <= 0;
-        second_matrix[1][1] <= 0;
-        second_matrix[1][2] <= 0;
-        second_matrix[1][3] <= 0;
-        second_matrix[2][0] <= 0;
-        second_matrix[2][1] <= 0; 
-        second_matrix[2][2] <= 0;
-        second_matrix[2][3] <= 0;
-        second_matrix[3][0] <= 0; 
-        second_matrix[3][1] <= 0;
-        second_matrix[3][2] <= 0; 
-        second_matrix[3][3] <= 0;
+        rot_matrix <= 0;
+        second_matrix <= 0;
 
         cos_rot <= 0;
         sin_rot <= 0;
@@ -108,38 +79,8 @@ module view_matrix_calculator #(parameter COORD_WIDTH=16) (
         case (state)
             IDLE: begin
                if (start) begin
-                  rot_matrix[0][0] <= 0; 
-                  rot_matrix[0][1] <= 0;
-                  rot_matrix[0][2] <= 0;
-                  rot_matrix[0][3] <= 0;
-                  rot_matrix[1][0] <= 0;
-                  rot_matrix[1][1] <= 0;
-                  rot_matrix[1][2] <= 0;
-                  rot_matrix[1][3] <= 0;
-                  rot_matrix[2][0] <= 0;
-                  rot_matrix[2][1] <= 0; 
-                  rot_matrix[2][2] <= 0;
-                  rot_matrix[2][3] <= 0;
-                  rot_matrix[3][0] <= 0; 
-                  rot_matrix[3][1] <= 0;
-                  rot_matrix[3][2] <= 0; 
-                  rot_matrix[3][3] <= 0;
-                  second_matrix[0][0] <= 0; 
-                  second_matrix[0][1] <= 0;
-                  second_matrix[0][2] <= 0;
-                  second_matrix[0][3] <= 0;
-                  second_matrix[1][0] <= 0;
-                  second_matrix[1][1] <= 0;
-                  second_matrix[1][2] <= 0;
-                  second_matrix[1][3] <= 0;
-                  second_matrix[2][0] <= 0;
-                  second_matrix[2][1] <= 0; 
-                  second_matrix[2][2] <= 0;
-                  second_matrix[2][3] <= 0;
-                  second_matrix[3][0] <= 0; 
-                  second_matrix[3][1] <= 0;
-                  second_matrix[3][2] <= 0; 
-                  second_matrix[3][3] <= 0;
+                  rot_matrix <= 0;
+                  second_matrix <= 0;
 
                   state <= TRIG;
                end
@@ -155,6 +96,15 @@ module view_matrix_calculator #(parameter COORD_WIDTH=16) (
                     cos_rot[COORD_WIDTH-1:COORD_WIDTH-8] <= cos_rot_small;
                     sin_side[COORD_WIDTH-1:COORD_WIDTH-8] <= sin_side_small;
                     cos_side[COORD_WIDTH-1:COORD_WIDTH-8] <= cos_side_small;
+
+                    //forward_vec[0][COORD_WIDTH-1:COORD_WIDTH/2-6] <= sin_side_small >>> (COORD_WIDTH/2-6); // sin = x
+                    //forward_vec[2][COORD_WIDTH-1:COORD_WIDTH/2-6] <= cos_side_small >>> (COORD_WIDTH/2-6); // cos = z
+                    //forward_vec[2][COORD_WIDTH/2:COORD_WIDTH/2-7] <= sin_side_small;
+                    //forward_vec[0][COORD_WIDTH/2:COORD_WIDTH/2-7] <= cos_side_small;
+                    //forward_vec[2][COORD_WIDTH-1:COORD_WIDTH/2+1] <= sin_side_small[7]; // sign
+                    //forward_vec[0][COORD_WIDTH-1:COORD_WIDTH/2+1] <= cos_side_small[7]; // sign
+                    forward_vec[2][COORD_WIDTH-1:COORD_WIDTH-8] <= cos_side_small; 
+                    forward_vec[0][COORD_WIDTH-1:COORD_WIDTH-8] <= sin_side_small;
 
                     state <= SET_MATRIX;
                 end
@@ -174,13 +124,8 @@ module view_matrix_calculator #(parameter COORD_WIDTH=16) (
                 second_matrix[2][0] <= -1 * (sin_side >>> 15);
                 second_matrix[2][2] <= cos_side >>> 15;
 
-                //trans_matrix[0][0] <= 32'h0001_0000;
-                //trans_matrix[1][1] <= 32'h0001_0000;
-                //trans_matrix[2][2] <= 32'h0001_0000;
-                //trans_matrix[3][3] <= 32'h0001_0000;
-                //trans_matrix[0][3] <= x_in;
-                //trans_matrix[1][3] <= y_in;
-                //trans_matrix[2][3] <= z_in;
+                forward_vec[0] <= $signed(forward_vec[0]) >>> (COORD_WIDTH/2-1);
+                forward_vec[2] <= $signed(forward_vec[2]) >>> (COORD_WIDTH/2-1); // correct fixed point
 
                 state <= ROT_SIDE;
                 mult_start <= 1;
@@ -246,3 +191,4 @@ module view_matrix_calculator #(parameter COORD_WIDTH=16) (
 
 endmodule
 
+`default_nettype wire

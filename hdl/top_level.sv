@@ -234,30 +234,43 @@ module top_level(
 
   logic signed [3*COORD_WIDTH/2:0] world_read;
   logic [WORLD_BITS-1:0] world_read_addr;
-  //assign world_read_addr = 0;
+  logic [WORLD_BITS-1:0] world_read_addr_draw;
+  logic [WORLD_BITS-1:0] world_read_addr_update;
+  assign world_read_addr = fb_state == UPDATE ? world_read_addr_update : world_read_addr_draw;
 
   logic signed [COORD_WIDTH-1:0] x_corner;
   logic signed [COORD_WIDTH-1:0] y_corner;
   logic signed [COORD_WIDTH-1:0] z_corner;
 
+  logic world_drawn;
   logic signed [1:0][5:0] world_populator;
   always_ff @(posedge clk_pixel) begin
     if (new_frame) begin
         if (world_populator[0] < 63) begin // draw 16 cubes
+            world_drawn <= 0;
             world_populator[0] = world_populator[0] + 1;
             world_populator[1] = world_populator[1] + 1;
+        end else begin
+            world_drawn <= 1;
         end
     end
   end
+  logic [WORLD_BITS-1:0] world_write_addr;
+  logic [WORLD_BITS-1:0] world_write_addr_update;
+  logic signed [3*COORD_WIDTH/2:0] world_write_val;
+  logic signed [3*COORD_WIDTH/2:0] world_write_val_update;
+  assign world_write_addr = world_drawn ? world_write_addr_update : world_populator[0];
+  assign world_write_val = world_drawn ? world_write_val_update : {1'b1, 13'b0, world_populator[1][5:4], 1'b0, 13'b0, world_populator[1][3:2], 1'b0, 13'b0, world_populator[1][1:0], 1'b0};
+  //assign world_write_val = world_drawn ? world_write_val_update : {1'b1, 14'b0, world_populator[1][5:4], 14'b1, world_populator[1][3:2], 14'b0, world_populator[1][1:0]};
 
   xilinx_true_dual_port_read_first_2_clock_ram #(
     .RAM_WIDTH(3*COORD_WIDTH/2+1), // valid bit then x y z ints
     .RAM_DEPTH(WORLD_SIZE))
     world_bram (
-    .addra(world_populator[0]), 
+    .addra(world_write_addr), 
     .clka(clk_pixel),
     .wea(1'b1),
-    .dina({1'b1, 13'b0, world_populator[1][5:4], 1'b0, 13'b0, world_populator[1][3:2], 1'b0, 13'b0, world_populator[1][1:0], 1'b0}),
+    .dina(world_write_val),
     .ena(1'b1),
     .regcea(1'b1),
     .rsta(sys_rst),
@@ -273,6 +286,7 @@ module top_level(
   );
 
   logic signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix;
+  logic signed [2:0][COORD_WIDTH-1:0] forward_vec;
   logic start_view_matrix;
   logic view_done;
   view_matrix_calculator #(.COORD_WIDTH(COORD_WIDTH)) view_matrix_calc (
@@ -285,12 +299,18 @@ module top_level(
     .rot_angle(rot_angle),
     .side_angle(side_angle),
     .done(view_done),
-    .view_matrix(view_matrix)
+    .view_matrix(view_matrix),
+    .forward_vec(forward_vec)
   );
 
-  enum {IDLE, INIT, CLEARING, DRAW, DONE} fb_state;
+  enum {IDLE, INIT, CLEARING, DRAW, UPDATE, DONE} fb_state;
   logic start_render;
   logic render_done;
+
+  logic start_update;
+  logic update_busy;
+  logic update_done;
+
   logic [2:0] state_status;
   logic[8:0] test_incr;
   always_ff @(posedge clk_pixel) begin
@@ -331,16 +351,26 @@ module top_level(
         DRAW: begin
           start_render <= view_done;
           if (render_done) begin
-            fb_state <= DONE;
+            fb_state <= UPDATE;
+            start_update <= 1;
           end
 
           start_view_matrix <= 0;
           state_status <= 3;
         end
+        UPDATE: begin
+            if (update_busy) begin
+                start_update <= 0;
+            end
+            if (update_done) begin
+                fb_state <= DONE;
+            end
+            state_status <= 4;
+        end
         DONE: begin
           start_render <= 0;
           fb_state <= IDLE;
-          state_status <= 4;
+          state_status <= 5;
         end
         default: begin
           if (new_frame) begin
@@ -351,7 +381,29 @@ module top_level(
     end
   end
 
-  localparam MOVE_SPEED = 32'h0000039a;
+  // control world state
+  world_changer #(.COORD_WIDTH(COORD_WIDTH), .WORLD_BITS(WORLD_BITS), .WORLD_SIZE(WORLD_SIZE)) world_controller (
+    .clk_in(clk_pixel),
+    .rst_in(sys_rst),
+    .start(start_update),
+    .sw(sw),
+    .btn(btn),
+    .forward_vec(forward_vec),
+    .world_read(world_read),
+    .looked_at_cube(looked_at_cube),
+    .looked_at_normal(looked_at_normal),
+    .x_input(x_input),
+    .y_input(y_input),
+    .z_input(z_input),
+    .rot_angle(rot_angle),
+    .side_angle(side_angle),
+    .world_read_addr(world_read_addr_update),
+    .world_write_addr(world_write_addr_update),
+    .world_write(world_write_val_update),
+    .busy(update_busy),
+    .done(update_done)
+  );
+
   always_ff @(posedge clk_pixel) begin
     dp_re <= 1;
 
@@ -361,54 +413,6 @@ module top_level(
     fb_we <= (fb_state == CLEARING) || (drawing);
     dp_we <= (fb_state == CLEARING) || (drawing);
     drawing_store <= drawing;
-
-    if (new_frame) begin
-      if (sw[3]) begin
-        x_input <= x_input + MOVE_SPEED; //Moves camera right towards negative X
-      end
-      if (sw[4]) begin
-        x_input <= x_input - MOVE_SPEED; //Moves camera left towards positive X
-      end
-      if (sw[5]) begin
-        y_input <= y_input + MOVE_SPEED; //Moves camera down towards negative Y
-      end
-      if (sw[6]) begin
-        y_input <= y_input - MOVE_SPEED; //Moves camera up towards positive Y
-      end
-      if (sw[7]) begin
-        z_input <= z_input + MOVE_SPEED; //Moves camera forwards towards negative Z
-      end
-      if (sw[8]) begin
-        z_input <= z_input - MOVE_SPEED; //Moves camera backwards towards positive Z
-      end
-      if (sw[9]) begin
-        rot_angle <= rot_angle + 32'h0080_0000;
-      end
-      if (sw[10]) begin
-        rot_angle <= rot_angle - 32'h0080_0000;
-      end
-      if (sw[11]) begin
-        side_angle <= side_angle + 32'h0080_0000;
-      end
-      if (sw[12]) begin
-        side_angle <= side_angle - 32'h0080_0000;
-      end
-    end
-    if (sys_rst) begin
-      x_input <= 32'h00000000;
-      y_input <= 32'h00010000;
-      z_input <= 32'hFFFA0000;
-    end else if (btn[1]) begin
-      x_input <= 32'h00000005;
-      y_input <= 32'h00000005;
-      z_input <= 32'h00000005;
-    end else if (btn[2]) begin
-      x_input = 32'hFFFF0628;
-      y_input = 32'hFFFFF156;
-      z_input = 32'hFFFEC464;
-      rot_angle <= 0;
-      side_angle <= 0;
-    end
   end
 
   logic [2:0] raster_state;
@@ -432,18 +436,18 @@ module top_level(
     end else if (sw[1] && sw[13]) begin
       val_to_display <= cycles_per_frame[1];
     end else if (sw[1]) begin
-      val_to_display <= cycles;
+      //val_to_display <= cycles;
+      val_to_display <= rot_angle;
     end else if (sw[13]) begin
-      val_to_display <= z_input;
+      //val_to_display <= z_input;
+      val_to_display <= world_write_addr;
     end else if (sw[15]) begin
-      val_to_display <= x_input;
+      //val_to_display <= x_input;
+      val_to_display <= world_read[48:33];
     end else begin
-      // Display average cycles per frame over 2 frames.
-      val_to_display <= (cycles_per_frame[0] + cycles_per_frame[1]) >> 1;
+    // Display average cycles per frame over 2 frames.
+    val_to_display <= (cycles_per_frame[0] + cycles_per_frame[1]) >> 1;
     end
-    //val_to_display <= {view_matrix[1][3], view_matrix[2][3]};
-    //val_to_display <= {view_matrix[1][3][31:24], view_matrix[2][3][31:24], view_matrix[0][0][31:16]};
-    //val_to_display <= {view_matrix[2][3][31:16], view_matrix[0][0][31:16]};
   end
 
   // Rendering
@@ -457,7 +461,7 @@ module top_level(
     .start(start_render),
     .world_read(world_read),
     .view_matrix(view_matrix),
-    .world_read_addr(world_read_addr),
+    .world_read_addr(world_read_addr_draw),
     .x_cor(x_corner),
     .y_cor(y_corner),
     .z_cor(z_corner),
@@ -513,9 +517,9 @@ module top_level(
       // red = converted_r;
       // green = converted_g;
       // blue = converted_b;
-      red = btn[3] ? depth_read : fb_read;
-      green = btn[3] ? depth_read : fb_read;
-      blue = btn[3] ? depth_read : fb_read;
+      red = fb_read;
+      green = fb_read;
+      blue = fb_read;
     end
   end
  
