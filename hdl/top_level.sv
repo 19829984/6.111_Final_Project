@@ -246,7 +246,7 @@ module top_level(
   logic signed [1:0][5:0] world_populator;
   always_ff @(posedge clk_pixel) begin
     if (new_frame) begin
-        if (world_populator[0] < 63) begin // draw 16 cubes
+        if (world_populator[0] < 63) begin // draw 64 cubes
             world_drawn <= 0;
             world_populator[0] = world_populator[0] + 1;
             world_populator[1] = world_populator[1] + 1;

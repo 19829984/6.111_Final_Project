@@ -39,10 +39,11 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
     logic signed [2:0][NORMAL_WIDTH-1:0] normal_at_center;
     logic [DEPTH_BIT_WIDTH-1:0] closest_depth_at_center;
     logic [WORLD_BITS-1:0] current_cube_at_center;
+    logic highlight;
 
     assign valid_cube = world_read[3*COORD_WIDTH/2];
 
-    assign color = {1'b1, current_cube[3:0], 3'b1};
+    // assign color = {1'b1, current_cube[3:0], 3'b1};
     cube_drawer #(.COORD_WIDTH(COORD_WIDTH), .DEPTH_BIT_WIDTH(DEPTH_BIT_WIDTH), .FB_WIDTH(FB_WIDTH), .FB_HEIGHT(FB_HEIGHT), .FB_BIT_WIDTH(FB_BIT_WIDTH), .NORMAL_WIDTH(2))  (
         .clk_in(clk_in),
         .rst_in(rst_in),
@@ -53,10 +54,12 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
         .view_matrix(view_matrix),
         .x(x),
         .y(y),
+        .color_in({1'b1, current_cube[3:0], 3'b1}),
         .depth(depth),
         .cube_at_center(cube_at_center),
         .center_face_normal(center_face_normal),
-        .color(),
+        .color(color),
+        .highlight(highlight),
         .drawing(drawing),
         .busy(cube_busy),
         .done(cube_done)
@@ -101,8 +104,8 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
                         wait_until_draw <= 0;
                         current_cube <= 0;
                         state <= INIT_READ;
-                        closest_depth_at_center <= ~0; // Initialize to max depth
-                        looked_at_cube <= ~0;
+                        closest_depth_at_center <= ~'0; // Initialize to max depth
+                        looked_at_cube <= ~'0;
                     end
                     done <= 0;
                end
@@ -114,6 +117,12 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
                         z_corner[COORD_WIDTH-1:COORD_WIDTH/2] <= world_read[COORD_WIDTH/2-1:0];
                         cube_start <= 1;
                         state <= DRAWING;
+
+                        if (current_cube == looked_at_cube) begin
+                            highlight <= 1;
+                        end else begin
+                            highlight <= 0;
+                        end
 
                     end else if (wait_until_draw == 2'b11 && ~valid_cube) begin
                         wait_until_draw <= 0;
@@ -156,6 +165,9 @@ module world_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramet
                DONE: begin
                     done <= 0;
                     state <= IDLE;
+                    if (closest_depth_at_center == ~'0) begin // No center cube found
+                        current_cube_at_center <= ~'0;
+                    end
                end
             endcase
         end

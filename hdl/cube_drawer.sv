@@ -7,7 +7,9 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
     input wire signed [COORD_WIDTH-1:0] x_corner,
     input wire signed [COORD_WIDTH-1:0] y_corner,
     input wire signed [COORD_WIDTH-1:0] z_corner,
+    input wire logic [FB_BIT_WIDTH-1:0] color_in,
     input wire signed [3:0][3:0][COORD_WIDTH-1:0] view_matrix,
+    input wire highlight,
 
     output logic [COORD_WIDTH-1:0] x, y,
     output logic [DEPTH_BIT_WIDTH-1:0] depth,
@@ -28,6 +30,7 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
     logic drawer_done;
     logic raster_reset;
     logic tri_at_center;
+    logic [3:0] center_tri_index;
     logic signed [COORD_WIDTH-1:0] x_cor;
     logic signed [COORD_WIDTH-1:0] y_cor;
     logic signed [COORD_WIDTH-1:0] z_cor;
@@ -43,7 +46,7 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
         y <= y_pipe;
         depth <= depth_pipe;
         drawing <= drawing_pipe;
-        cube_at_center <= tri_at_center; // True if any tri is at center
+        cube_at_center <= cube_at_center | tri_at_center; // True if any tri is at center
     end
     
     rasterizer #(
@@ -81,6 +84,7 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
             state <= IDLE;
             color <= 8'hFF;
             raster_reset <= 1;
+            center_tri_index <= ~0;
         end else begin
             case (state)
                 IDLE: begin
@@ -99,7 +103,6 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
                 DRAW_TRI: begin
                     if (drawer_busy) begin
                         drawer_start <= 0;
-
                         if (x_pipe == HORIZONTAL_CENTER && y_pipe == VERTICAL_CENTER) begin
                             tri_at_center <= 1;
                             center_face_normal <= tri_normals[0];
@@ -115,7 +118,10 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
                             done <= 1;
                             busy <= 0;
                         end
-
+                        
+                        if (tri_at_center) begin
+                            center_tri_index <= tri_index;
+                        end
                         // Let's draw one triangle for now
                         //state <= DONE;
                         //done <= 1;
@@ -128,6 +134,7 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
                 end
                 INIT_TRI: begin
                     raster_reset <= 0;
+                    tri_at_center <= 0;
                     case (tri_index) 
                         4'b0000: begin
                             triangle_coords[0][0] <= x_cor;
@@ -432,7 +439,7 @@ module cube_drawer #(parameter COORD_WIDTH=32, parameter WIREFRAME = 0, paramete
                     endcase
                     state <= DRAW_TRI;
                     drawer_start <= 1;
-                    color[FB_BIT_WIDTH-1:FB_BIT_WIDTH-4] <= ~tri_index[3:0];  // for debug
+                    color <= highlight && (tri_index == center_tri_index) ? 8'hFF : color_in;  // for debug
                 end
             endcase
         end
